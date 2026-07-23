@@ -34,24 +34,12 @@
 #include <stdexcept>
 #include <vector>
 
+#include <streambuf>
 #include <wchar.h>
 #include <windows.h>
 #include <shellapi.h>
 
-#include <boost/filesystem/path.hpp>
-#include <boost/iostreams/stream_buffer.hpp>
-
 #include "configure.hpp"
-
-#if INNOEXTRACT_HAVE_STD_CODECVT_UTF8_UTF16
-// C++11
-#include <codecvt>
-namespace { typedef std::codecvt_utf8_utf16<wchar_t> utf8_codecvt; }
-#else
-// Using private Boost stuff - bad, but meh.
-#include <boost/filesystem/detail/utf8_codecvt_facet.hpp>
-namespace { typedef boost::filesystem::detail::utf8_codecvt_facet utf8_codecvt; }
-#endif
 
 #include "util/ansi.hpp"
 #include "util/encoding.hpp"
@@ -406,7 +394,70 @@ public:
 	
 };
 
-typedef boost::iostreams::stream_buffer<windows_console_sink> console_buffer;
+/*!
+ * std::streambuf that forwards flushed characters to a Sink's
+ * \code std::streamsize write(const char *, std::streamsize) \endcode member,
+ * replacing boost::iostreams::stream_buffer<Sink>.
+ */
+template <typename Sink>
+class stream_buffer : public std::streambuf {
+	
+	Sink sink;
+	std::vector<char> obuffer;
+	
+public:
+	
+	template <typename Arg>
+	explicit stream_buffer(Arg & arg, size_t buffer_size = 4096) : sink(arg), obuffer(buffer_size) {
+		setp(obuffer.data(), obuffer.data() + obuffer.size());
+	}
+	
+	~stream_buffer() override {
+		flush_buffer();
+	}
+	
+protected:
+	
+	int_type overflow(int_type c) override {
+		if(!flush_buffer()) {
+			return traits_type::eof();
+		}
+		if(!traits_type::eq_int_type(c, traits_type::eof())) {
+			*pptr() = traits_type::to_char_type(c);
+			pbump(1);
+		}
+		return traits_type::not_eof(c);
+	}
+	
+	int sync() override {
+		return flush_buffer() ? 0 : -1;
+	}
+	
+	std::streamsize xsputn(const char * s, std::streamsize n) override {
+		if(!flush_buffer()) {
+			return 0;
+		}
+		std::streamsize written = sink.write(s, n);
+		return written;
+	}
+	
+private:
+	
+	bool flush_buffer() {
+		std::ptrdiff_t n = pptr() - pbase();
+		if(n > 0) {
+			std::streamsize written = sink.write(pbase(), std::streamsize(n));
+			pbump(-int(n));
+			if(written != std::streamsize(n)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	
+};
+
+typedef stream_buffer<windows_console_sink> console_buffer;
 struct console_buffer_info {
 	HANDLE handle;
 	console_buffer * buf;
@@ -523,8 +574,9 @@ int main() {
 		LocalFree(wargv);
 	}
 	
-	// Tell boost::filesystem to interpret our path strings as UTF-8
-	boost::filesystem::path::imbue(std::locale(std::locale(), new utf8_codecvt()));
+	// std::filesystem::path uses native (UTF-16) wchar_t strings on Windows and does its
+	// own UTF-8 <-> UTF-16 conversion via util::u8path() / util::as_string()
+	// (see util/boostfs_compat.hpp), so no locale setup is needed here.
 	
 	// Enable UTF-8 output and ANSI escape sequences
 	util::console_wrapper wrapped;

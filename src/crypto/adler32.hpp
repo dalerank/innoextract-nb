@@ -28,7 +28,7 @@
 
 #include <stddef.h>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "crypto/checksum.hpp"
 
@@ -41,11 +41,11 @@ struct adler32 : public checksum_base<adler32> {
 	
 	void update(const char * data, size_t length);
 	
-	boost::uint32_t finalize() const { return state; }
+	std::uint32_t finalize() const { return state; }
 	
 private:
 	
-	boost::uint32_t state;
+	std::uint32_t state;
 	
 };
 

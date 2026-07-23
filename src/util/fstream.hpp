@@ -21,110 +21,24 @@
 /*!
  * \file
  *
- * boost::filesystem::{i,o,}fstream doesn't support unicode names on windows
- * Implement our own wrapper using boost::iostreams.
+ * std::filesystem::path-aware file streams.
+ *
+ * Since C++17, std::basic_{i,o,}fstream have constructor/open() overloads that take a
+ * std::filesystem::path directly. On Windows this uses the native wide-character API
+ * internally, so Unicode filenames work correctly without any extra wrapper code
+ * (unlike passing a narrow std::string, which would go through the ANSI codepage).
  */
 #ifndef INNOEXTRACT_UTIL_FSTREAM_HPP
 #define INNOEXTRACT_UTIL_FSTREAM_HPP
 
-#if !defined(_WIN32)
-
-#include <boost/filesystem/fstream.hpp>
+#include <fstream>
 
 namespace util {
 
-typedef boost::filesystem::ifstream ifstream;
-typedef boost::filesystem::ofstream ofstream;
-typedef boost::filesystem::fstream  fstream;
+typedef std::ifstream ifstream;
+typedef std::ofstream ofstream;
+typedef std::fstream  fstream;
 
 } // namespace util
-
-#else // if defined(_WIN32)
-
-#include <boost/filesystem/path.hpp>
-#include <boost/iostreams/device/file_descriptor.hpp>
-#include <boost/iostreams/stream.hpp>
-
-namespace util {
-
-/*!
- * {i,o,}fstream implementation with support for Unicode filenames.
- * Create a subclass instead of a typedef to force boost::filesystem::path parameters.
- */
-template <typename Device>
-class path_fstream : public boost::iostreams::stream<Device> {
-	
-private: // disallow copying
-	
-	path_fstream(const path_fstream &);
-	const path_fstream & operator=(const path_fstream &);
-	
-	typedef boost::filesystem::path path;
-	typedef boost::iostreams::stream<Device> base;
-	
-	Device & device() { return **this; }
-	
-	void fix_open_mode(std::ios_base::openmode mode);
-	
-public:
-	
-	path_fstream() : base(Device()) { }
-	
-	explicit path_fstream(const path & p) : base(p) { }
-	
-	path_fstream(const path & p, std::ios_base::openmode mode) : base(p, mode) {
-		fix_open_mode(mode);
-	}
-	
-	void open(const path & p) {
-		base::close();
-		base::open(p);
-	}
-
-	void open(const path & p, std::ios_base::openmode mode) {
-		base::close();
-		base::open(p, mode);
-		fix_open_mode(mode);
-	}
-	
-	bool is_open() {
-		return device().is_open(); // return the real open state, not base::is_open()
-	}
-	
-	virtual ~path_fstream() { }
-};
-
-template <>
-inline void path_fstream<boost::iostreams::file_descriptor_source>
-	::fix_open_mode(std::ios_base::openmode mode) {
-	if((mode & std::ios_base::ate) && is_open()) {
-		seekg(0, std::ios_base::end);
-	}
-}
-
-template <>
-inline void path_fstream<boost::iostreams::file_descriptor_sink>
-	::fix_open_mode(std::ios_base::openmode mode) {
-	if((mode & std::ios_base::ate) && is_open()) {
-		seekp(0, std::ios_base::end);
-	}
-}
-
-template <>
-inline void path_fstream<boost::iostreams::file_descriptor>
-	::fix_open_mode(std::ios_base::openmode mode) {
-	if((mode & std::ios_base::ate) && is_open()) {
-		seekg(0, std::ios_base::end);
-		seekp(0, std::ios_base::end);
-	}
-}
-
-typedef path_fstream<boost::iostreams::file_descriptor_source> ifstream;
-typedef path_fstream<boost::iostreams::file_descriptor_sink>   ofstream;
-typedef path_fstream<boost::iostreams::file_descriptor>        fstream;
-
-} // namespace util
-
-#endif // defined(_WIN32)
 
 #endif // INNOEXTRACT_UTIL_FSTREAM_HPP

@@ -21,15 +21,19 @@
 /*!
  * \file
  *
- * Compatibility functions for older Boost.Filesystem versions.
+ * Helper functions to convert between std::filesystem::path and UTF-8
+ * std::string. All strings used internally (setup data, command-line
+ * arguments) are UTF-8. On most platforms std::filesystem::path's narrow
+ * encoding already matches this, but on Windows std::filesystem::path is
+ * natively UTF-16 and converts to/from std::string using the current ANSI
+ * codepage, which would silently mangle non-ASCII characters. These helpers
+ * make sure UTF-8 is used consistently regardless of platform.
  */
 #ifndef INNOEXTRACT_UTIL_BOOSTFS_COMPAT_HPP
 #define INNOEXTRACT_UTIL_BOOSTFS_COMPAT_HPP
 
+#include <filesystem>
 #include <string>
-
-#include <boost/filesystem/path.hpp>
-#include <boost/filesystem/operations.hpp>
 
 namespace util {
 
@@ -37,9 +41,25 @@ inline const std::string & as_string(const std::string & path) {
 	return path;
 }
 
-inline const std::string as_string(const boost::filesystem::path & path) {
+#if defined(_WIN32)
+
+//! Convert a std::filesystem::path to a UTF-8 string.
+std::string as_string(const std::filesystem::path & path);
+
+//! Construct a std::filesystem::path from a UTF-8 string.
+std::filesystem::path u8path(const std::string & utf8);
+
+#else
+
+inline std::string as_string(const std::filesystem::path & path) {
 	return path.string();
 }
+
+inline std::filesystem::path u8path(const std::string & utf8) {
+	return std::filesystem::path(utf8);
+}
+
+#endif
 
 } // namespace util
 

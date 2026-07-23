@@ -23,7 +23,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include <boost/static_assert.hpp>
 
 #include "setup/version.hpp"
 #include "util/load.hpp"
@@ -148,7 +147,7 @@ void header::load(std::istream & is, const version & version) {
 	options = 0;
 	
 	if(version < INNO_VERSION(1, 3, 0)) {
-		(void)util::load<boost::uint32_t>(is); // uncompressed size of the setup header
+		(void)util::load<std::uint32_t>(is); // uncompressed size of the setup header
 	}
 	
 	is >> util::binary_string(app_name);
@@ -287,7 +286,7 @@ void header::load(std::istream & is, const version & version) {
 	}
 	
 	if(version >= INNO_VERSION(4, 0, 0)) {
-		language_count = util::load<boost::uint32_t>(is);
+		language_count = util::load<std::uint32_t>(is);
 	} else if(version >= INNO_VERSION(2, 0, 1)) {
 		language_count = 1;
 	} else {
@@ -295,76 +294,76 @@ void header::load(std::istream & is, const version & version) {
 	}
 	
 	if(version >= INNO_VERSION(4, 2, 1)) {
-		message_count = util::load<boost::uint32_t>(is);
+		message_count = util::load<std::uint32_t>(is);
 	} else {
 		message_count = 0;
 	}
 	
 	if(version >= INNO_VERSION(4, 1, 0)) {
-		permission_count = util::load<boost::uint32_t>(is);
+		permission_count = util::load<std::uint32_t>(is);
 	} else {
 		permission_count = 0;
 	}
 	
 	if(version >= INNO_VERSION(2, 0, 0) || version.is_isx()) {
-		type_count = util::load<boost::uint32_t>(is);
-		component_count = util::load<boost::uint32_t>(is);
+		type_count = util::load<std::uint32_t>(is);
+		component_count = util::load<std::uint32_t>(is);
 	} else {
 		type_count = 0, component_count = 0;
 	}
 	if(version >= INNO_VERSION(2, 0, 0) || (version.is_isx() && version >= INNO_VERSION(1, 3, 17))) {
-		task_count = util::load<boost::uint32_t>(is);
+		task_count = util::load<std::uint32_t>(is);
 	} else {
 		task_count = 0;
 	}
 	
-	directory_count = util::load<boost::uint32_t>(is, version.bits());
-	file_count = util::load<boost::uint32_t>(is, version.bits());
-	data_entry_count = util::load<boost::uint32_t>(is, version.bits());
-	icon_count = util::load<boost::uint32_t>(is, version.bits());
-	ini_entry_count = util::load<boost::uint32_t>(is, version.bits());
-	registry_entry_count = util::load<boost::uint32_t>(is, version.bits());
-	delete_entry_count = util::load<boost::uint32_t>(is, version.bits());
-	uninstall_delete_entry_count = util::load<boost::uint32_t>(is, version.bits());
-	run_entry_count = util::load<boost::uint32_t>(is, version.bits());
-	uninstall_run_entry_count = util::load<boost::uint32_t>(is, version.bits());
+	directory_count = util::load<std::uint32_t>(is, version.bits());
+	file_count = util::load<std::uint32_t>(is, version.bits());
+	data_entry_count = util::load<std::uint32_t>(is, version.bits());
+	icon_count = util::load<std::uint32_t>(is, version.bits());
+	ini_entry_count = util::load<std::uint32_t>(is, version.bits());
+	registry_entry_count = util::load<std::uint32_t>(is, version.bits());
+	delete_entry_count = util::load<std::uint32_t>(is, version.bits());
+	uninstall_delete_entry_count = util::load<std::uint32_t>(is, version.bits());
+	run_entry_count = util::load<std::uint32_t>(is, version.bits());
+	uninstall_run_entry_count = util::load<std::uint32_t>(is, version.bits());
 	
-	boost::int32_t license_size = 0;
-	boost::int32_t info_before_size = 0;
-	boost::int32_t info_after_size = 0;
+	std::int32_t license_size = 0;
+	std::int32_t info_before_size = 0;
+	std::int32_t info_after_size = 0;
 	if(version < INNO_VERSION(1, 3, 0)) {
-		license_size = util::load<boost::int32_t>(is, version.bits());
-		info_before_size = util::load<boost::int32_t>(is, version.bits());
-		info_after_size = util::load<boost::int32_t>(is, version.bits());
+		license_size = util::load<std::int32_t>(is, version.bits());
+		info_before_size = util::load<std::int32_t>(is, version.bits());
+		info_after_size = util::load<std::int32_t>(is, version.bits());
 	}
 	
 	winver.load(is, version);
 	
 	if(version < INNO_VERSION_EXT(6, 4, 0, 1)) {
-		back_color = util::load<boost::uint32_t>(is);
+		back_color = util::load<std::uint32_t>(is);
 	} else {
 		back_color = 0;
 	}
 	if(version >= INNO_VERSION(1, 3, 3) && version < INNO_VERSION_EXT(6, 4, 0, 1)) {
-		back_color2 = util::load<boost::uint32_t>(is);
+		back_color2 = util::load<std::uint32_t>(is);
 	} else {
 		back_color2 = 0;
 	}
 	if(version < INNO_VERSION(5, 5, 7)) {
-		image_back_color = util::load<boost::uint32_t>(is);
+		image_back_color = util::load<std::uint32_t>(is);
 	} else {
 		image_back_color = 0;
 	}
 	if((version >= INNO_VERSION(2, 0, 0) && version < INNO_VERSION(5, 0, 4)) || version.is_isx()) {
-		small_image_back_color = util::load<boost::uint32_t>(is);
+		small_image_back_color = util::load<std::uint32_t>(is);
 	} else {
 		small_image_back_color = 0;
 	}
 	
 	if(version >= INNO_VERSION(6, 0, 0)) {
 		wizard_style = stored_enum<stored_setup_style>(is).get();
-		wizard_resize_percent_x = util::load<boost::uint32_t>(is);
-		wizard_resize_percent_y = util::load<boost::uint32_t>(is);
+		wizard_resize_percent_x = util::load<std::uint32_t>(is);
+		wizard_resize_percent_y = util::load<std::uint32_t>(is);
 	} else {
 		wizard_style = ClassicStyle;
 		wizard_resize_percent_x = 0;
@@ -387,7 +386,7 @@ void header::load(std::istream & is, const version & version) {
 		is.read(password.md5, std::streamsize(sizeof(password.md5)));
 		password.type = crypto::MD5;
 	} else {
-		password.crc32 = util::load<boost::uint32_t>(is);
+		password.crc32 = util::load<std::uint32_t>(is);
 		password.type = crypto::CRC32;
 	}
 	if(version >= INNO_VERSION(6, 4, 0)) {
@@ -402,10 +401,10 @@ void header::load(std::istream & is, const version & version) {
 	}
 	
 	if(version >= INNO_VERSION(4, 0, 0)) {
-		extra_disk_space_required = util::load<boost::int64_t>(is);
-		slices_per_disk = util::load<boost::uint32_t>(is);
+		extra_disk_space_required = util::load<std::int64_t>(is);
+		slices_per_disk = util::load<std::uint32_t>(is);
 	} else {
-		extra_disk_space_required = util::load<boost::int32_t>(is);
+		extra_disk_space_required = util::load<std::int32_t>(is);
 		slices_per_disk = 1;
 	}
 	
@@ -437,7 +436,7 @@ void header::load(std::istream & is, const version & version) {
 	}
 	
 	if(version.is_isx() && version >= INNO_VERSION(2, 0, 10) && version < INNO_VERSION(3, 0, 0)) {
-		boost::int32_t code_line_offset = util::load<boost::int32_t>(is);
+		std::int32_t code_line_offset = util::load<std::int32_t>(is);
 		(void)code_line_offset;
 	}
 	
@@ -492,8 +491,8 @@ void header::load(std::istream & is, const version & version) {
 	}
 	
 	if(version >= INNO_VERSION(5, 2, 1) && version < INNO_VERSION(5, 3, 10)) {
-		signed_uninstaller_original_size = util::load<boost::uint32_t>(is);
-		signed_uninstaller_header_checksum = util::load<boost::uint32_t>(is);
+		signed_uninstaller_original_size = util::load<std::uint32_t>(is);
+		signed_uninstaller_header_checksum = util::load<std::uint32_t>(is);
 	} else {
 		signed_uninstaller_original_size = signed_uninstaller_header_checksum = 0;
 	}
@@ -504,9 +503,9 @@ void header::load(std::istream & is, const version & version) {
 	}
 	
 	if(version >= INNO_VERSION(5, 5, 0)) {
-		uninstall_display_size = util::load<boost::uint64_t>(is);
+		uninstall_display_size = util::load<std::uint64_t>(is);
 	} else if(version >= INNO_VERSION(5, 3, 6)) {
-		uninstall_display_size = util::load<boost::uint32_t>(is);
+		uninstall_display_size = util::load<std::uint32_t>(is);
 	} else {
 		uninstall_display_size = 0;
 	}
@@ -523,7 +522,7 @@ void header::load(std::istream & is, const version & version) {
 		 * type and before EncryptionUsed flag.
 		 * The other values/flags between here and there look sane (mostly default).
 		 */
-		(void)util::load<boost::uint8_t>(is);
+		(void)util::load<std::uint8_t>(is);
 	}
 	
 	options |= load_flags(is, version);

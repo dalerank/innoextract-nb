@@ -29,7 +29,7 @@
 #include <string>
 #include <iosfwd>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "setup/item.hpp"
 #include "util/enum.hpp"
@@ -52,9 +52,9 @@ struct directory_entry : public item {
 	std::string name;
 	std::string permissions;
 	
-	boost::uint32_t attributes;
+	std::uint32_t attributes;
 	
-	boost::int16_t permission; //!< index into the permission entry list
+	std::int16_t permission; //!< index into the permission entry list
 	
 	flags options;
 	

@@ -24,7 +24,6 @@
 #include <istream>
 #include <sstream>
 
-#include <boost/foreach.hpp>
 
 #include "crypto/hasher.hpp"
 #include "crypto/pbkdf2.hpp"
@@ -79,7 +78,7 @@ void load_wizard_images(std::istream & is, const setup::version & version,
 	
 	size_t count = 1;
 	if(version >= INNO_VERSION(5, 6, 0)) {
-		count = util::load<boost::uint32_t>(is);
+		count = util::load<std::uint32_t>(is);
 	}
 	
 	if(entries & (info::WizardImages | info::NoSkip)) {
@@ -174,7 +173,7 @@ void info::try_load(std::istream & is, entry_types entries, util::codepage_id fo
 		// codepage of the system the installer is run on.
 		// Look at the list of available languages to guess a suitable codepage.
 		codepage = languages[0].codepage;
-		BOOST_FOREACH(const language_entry & language, languages) {
+		for(const language_entry & language : languages) {
 			if(language.codepage == util::cp_windows1252) {
 				codepage = util::cp_windows1252;
 				break;
@@ -183,7 +182,7 @@ void info::try_load(std::istream & is, entry_types entries, util::codepage_id fo
 	}
 	
 	header.decode(codepage);
-	BOOST_FOREACH(language_entry & language, languages) {
+	for(language_entry & language : languages) {
 		language.decode(codepage);
 	}
 	
@@ -337,7 +336,7 @@ std::string info::get_key(const std::string & password) {
 		result.resize(crypto::xchacha20::key_size + crypto::xchacha20::nonce_size);
 		typedef crypto::pbkdf2<crypto::sha256> pbkdf2;
 		pbkdf2::derive(encoded_password.c_str(), encoded_password.length(), &header.password_salt[0], 16,
-		               util::little_endian::load<boost::uint32_t>(&header.password_salt[16]), &result[0],
+		               util::little_endian::load<std::uint32_t>(&header.password_salt[16]), &result[0],
 		               crypto::xchacha20::key_size);
 		
 		std::memcpy(&result[crypto::xchacha20::key_size], &header.password_salt[20],
@@ -366,7 +365,7 @@ bool info::check_key(const std::string & key) {
 		
 		char nonce[crypto::xchacha20::nonce_size];
 		std::memcpy(nonce, key.c_str() + crypto::xchacha20::key_size, crypto::xchacha20::nonce_size);
-		*reinterpret_cast<boost::uint32_t *>(nonce + 8) = ~*reinterpret_cast<boost::uint32_t *>(nonce + 8);
+		*reinterpret_cast<std::uint32_t *>(nonce + 8) = ~*reinterpret_cast<std::uint32_t *>(nonce + 8);
 		cipher.init(key.c_str(), nonce);
 		
 		char buffer[] = { 0, 0, 0, 0 };

@@ -28,7 +28,7 @@
 
 #include <istream>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 namespace loader {
 
@@ -44,9 +44,9 @@ public:
 	//! Position and size of a resource entry
 	struct resource {
 		
-		boost::uint32_t offset; //!< File offset of the resource data in bytes
+		std::uint32_t offset; //!< File offset of the resource data in bytes
 		
-		boost::uint32_t size; //!< Size of the resource data in bytes
+		std::uint32_t size; //!< Size of the resource data in bytes
 		
 		operator bool() { return offset != 0; }
 		bool operator!() { return offset == 0; }
@@ -75,7 +75,7 @@ public:
 		TypeAniCursor = 21,
 		TypeAniIcon = 22,
 		TypeHTML = 23,
-		Default = boost::uint32_t(-1)
+		Default = std::uint32_t(-1)
 	};
 	
 	/*!
@@ -90,12 +90,12 @@ public:
 	 *
 	 * \return the location of the resource or `(0, 0)` if the requested resource does not exist.
 	 */
-	static resource find_resource(std::istream & is, boost::uint32_t name,
-	                              boost::uint32_t type = TypeData,
-	                              boost::uint32_t language = Default);
+	static resource find_resource(std::istream & is, std::uint32_t name,
+	                              std::uint32_t type = TypeData,
+	                              std::uint32_t language = Default);
 	
 	enum file_version {
-		FileVersionUnknown = boost::uint64_t(-1)
+		FileVersionUnknown = std::uint64_t(-1)
 	};
 	
 	/*!
@@ -105,7 +105,7 @@ public:
 	 *
 	 * \return the file version number or FileVersionUnknown.
 	 */
-	static boost::uint64_t get_file_version(std::istream & is);
+	static std::uint64_t get_file_version(std::istream & is);
 	
 };
 

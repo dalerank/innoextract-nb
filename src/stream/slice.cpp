@@ -19,25 +19,41 @@
  */
 
 #include "stream/slice.hpp"
+#include <iterator>
 
+#include <algorithm>
 #include <sstream>
 #include <cstring>
 #include <limits>
 
+#include <cstdint>
+#include <filesystem>
 
-#include <boost/cstdint.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem/operations.hpp>
-#include <boost/range/size.hpp>
-
-#include <boost/version.hpp>
-#if BOOST_VERSION >= 107200
-#include <boost/filesystem/directory.hpp>
-#endif
-
+#include "util/boostfs_compat.hpp"
 #include "util/console.hpp"
 #include "util/load.hpp"
 #include "util/log.hpp"
+
+namespace {
+
+//! Case-insensitive ASCII comparison, equivalent to boost::iequals() for the
+//! (ASCII-only) filenames handled here.
+bool iequals(const std::string & a, const std::string & b) {
+	if(a.size() != b.size()) {
+		return false;
+	}
+	for(size_t i = 0; i < a.size(); i++) {
+		char ca = a[i], cb = b[i];
+		if(ca >= 'A' && ca <= 'Z') { ca = char(ca - 'A' + 'a'); }
+		if(cb >= 'A' && cb <= 'Z') { cb = char(cb - 'A' + 'a'); }
+		if(ca != cb) {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // anonymous namespace
 
 namespace stream {
 
@@ -50,16 +66,16 @@ const char slice_ids[][8] = {
 
 } // anonymous namespace
 
-slice_reader::slice_reader(std::istream * istream, boost::uint32_t offset)
+slice_reader::slice_reader(std::istream * istream, std::uint32_t offset)
 	: data_offset(offset),
 	  slices_per_disk(1), current_slice(0), slice_size(0),
 	  is(istream) {
 	
-	std::streampos max_size = std::streampos(std::numeric_limits<boost::int32_t>::max());
+	std::streampos max_size = std::streampos(std::numeric_limits<std::int32_t>::max());
 	
 	std::streampos file_size = is->seekg(0, std::ios_base::end).tellg();
 	
-	slice_size = boost::uint32_t(std::min(file_size, max_size));
+	slice_size = std::uint32_t(std::min(file_size, max_size));
 	if(is->seekg(data_offset).fail()) {
 		throw slice_error("could not seek to data");
 	}
@@ -87,11 +103,11 @@ void slice_reader::seek(size_t slice) {
 
 bool slice_reader::open_file(const path_type & file) {
 	
-	if(!boost::filesystem::exists(file)) {
+	if(!std::filesystem::exists(file)) {
 		return false;
 	}
 	
-	log_info << "Opening \"" << color::cyan << file.string() << color::reset << '"';
+	log_info << "Opening \"" << color::cyan << util::as_string(file) << color::reset << '"';
 	
 	ifs.close();
 	ifs.clear();
@@ -107,10 +123,10 @@ bool slice_reader::open_file(const path_type & file) {
 	char magic[8];
 	if(ifs.read(magic, 8).fail()) {
 		ifs.close();
-		throw slice_error("could not read slice magic number in \"" + file.string() + "\"");
+		throw slice_error("could not read slice magic number in \"" + util::as_string(file) + "\"");
 	}
 	bool found = false;
-	for(size_t i = 0; boost::size(slice_ids); i++) {
+	for(size_t i = 0; std::size(slice_ids); i++) {
 		if(!std::memcmp(magic, slice_ids[i], 8)) {
 			found = true;
 			break;
@@ -118,22 +134,22 @@ bool slice_reader::open_file(const path_type & file) {
 	}
 	if(!found) {
 		ifs.close();
-		throw slice_error("bad slice magic number in \"" + file.string() + "\"");
+		throw slice_error("bad slice magic number in \"" + util::as_string(file) + "\"");
 	}
 	
-	slice_size = util::load<boost::uint32_t>(ifs);
+	slice_size = util::load<std::uint32_t>(ifs);
 	if(ifs.fail()) {
 		ifs.close();
-		throw slice_error("could not read slice size in \"" + file.string() + "\"");
+		throw slice_error("could not read slice size in \"" + util::as_string(file) + "\"");
 	} else if(std::streampos(slice_size) > file_size) {
 		ifs.close();
 		std::ostringstream oss;
-		oss << "bad slice size in " << file << ": " << slice_size << " > " << file_size;
+		oss << "bad slice size in " << util::as_string(file) << ": " << slice_size << " > " << file_size;
 		throw slice_error(oss.str());
 	} else if(std::streampos(slice_size) < ifs.tellg()) {
 		ifs.close();
 		std::ostringstream oss;
-		oss << "bad slice size in " << file << ": " << slice_size << " < " << ifs.tellg();
+		oss << "bad slice size in " << util::as_string(file) << ": " << slice_size << " < " << ifs.tellg();
 		throw slice_error(oss.str());
 	}
 	
@@ -155,7 +171,7 @@ std::string slice_reader::slice_filename(const std::string & basename, size_t sl
 	} else {
 		size_t major = (slice / slices_per_disk) + 1;
 		size_t minor = slice % slices_per_disk;
-		oss << major << char(boost::uint8_t('a') + minor);
+		oss << major << char(std::uint8_t('a') + minor);
 	}
 	
 	oss << ".bin";
@@ -165,10 +181,12 @@ std::string slice_reader::slice_filename(const std::string & basename, size_t sl
 
 bool slice_reader::open_file_case_insensitive(const path_type & dirname, const path_type & filename) {
 	
-	boost::filesystem::directory_iterator end;
-	for(boost::filesystem::directory_iterator i(dirname); i != end; ++i) {
+	std::error_code ec;
+	std::filesystem::directory_iterator end;
+	for(std::filesystem::directory_iterator i(dirname, ec); !ec && i != end; ++i) {
 		path_type actual_filename = i->path().filename();
-		if(boost::iequals(actual_filename.string(), filename.string()) && open_file(dirname / actual_filename)) {
+		if(iequals(util::as_string(actual_filename), util::as_string(filename))
+		   && open_file(dirname / actual_filename)) {
 			return true;
 		}
 	}
@@ -208,7 +226,7 @@ void slice_reader::open(size_t slice) {
 	throw slice_error(oss.str());
 }
 
-bool slice_reader::seek(size_t slice, boost::uint32_t offset) {
+bool slice_reader::seek(size_t slice, std::uint32_t offset) {
 	
 	seek(slice);
 	
@@ -233,22 +251,22 @@ std::streamsize slice_reader::read(char * buffer, std::streamsize bytes) {
 	
 	while(bytes > 0) {
 		
-		boost::uint32_t read_pos = boost::uint32_t(is->tellg());
+		std::uint32_t read_pos = std::uint32_t(is->tellg());
 		if(read_pos > slice_size) {
 			break;
 		}
-		boost::uint32_t remaining = slice_size - read_pos;
+		std::uint32_t remaining = slice_size - read_pos;
 		if(!remaining) {
 			seek(current_slice + 1);
-			read_pos = boost::uint32_t(is->tellg());
+			read_pos = std::uint32_t(is->tellg());
 			if(read_pos > slice_size) {
 				break;
 			}
 			remaining = slice_size - read_pos;
 		}
 		
-		boost::uint64_t toread = std::min(boost::uint64_t(remaining), boost::uint64_t(bytes));
-		toread = std::min(toread, boost::uint64_t(std::numeric_limits<std::streamsize>::max()));
+		std::uint64_t toread = std::min(std::uint64_t(remaining), std::uint64_t(bytes));
+		toread = std::min(toread, std::uint64_t(std::numeric_limits<std::streamsize>::max()));
 		if(is->read(buffer, std::streamsize(toread)).fail()) {
 			break;
 		}

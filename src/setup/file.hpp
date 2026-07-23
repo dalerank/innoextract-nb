@@ -30,7 +30,7 @@
 #include <iosfwd>
 #include <vector>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "crypto/checksum.hpp"
 #include "setup/item.hpp"
@@ -97,11 +97,11 @@ struct file_entry : public item {
 	std::string install_font_name;
 	std::string strong_assembly_name;
 	
-	boost::uint32_t location; //!< index into the data entry list
-	boost::uint32_t attributes;
-	boost::uint64_t external_size;
+	std::uint32_t location; //!< index into the data entry list
+	std::uint32_t attributes;
+	std::uint64_t external_size;
 	
-	boost::int16_t permission; //!< index into the permission entry list
+	std::int16_t permission; //!< index into the permission entry list
 	
 	flags options;
 	
@@ -109,9 +109,9 @@ struct file_entry : public item {
 	
 	// Information about GOG Galaxy multi-part files
 	// These are not used in normal Inno Setup installers
-	std::vector<boost::uint32_t> additional_locations;
+	std::vector<std::uint32_t> additional_locations;
 	crypto::checksum checksum;
-	boost::uint64_t size;
+	std::uint64_t size;
 	
 	void load(std::istream & is, const info & i);
 	

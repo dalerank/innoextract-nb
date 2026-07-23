@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "configure.hpp"
 
@@ -37,10 +38,6 @@
 #if INNOEXTRACT_HAVE_IOCTL
 #include <sys/ioctl.h>
 #endif
-
-#include <boost/date_time/posix_time/posix_time_types.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/foreach.hpp>
 
 #include "util/output.hpp"
 #include "util/windows.hpp"
@@ -182,7 +179,11 @@ static int query_screen_width() {
 	try {
 		char * columns = std::getenv("COLUMNS");
 		if(columns) {
-			return boost::lexical_cast<int>(columns);
+			size_t pos = 0;
+			int width = std::stoi(std::string(columns), &pos);
+			if(pos != 0 && columns[pos] == '\0') {
+				return width;
+			}
 		}
 	} catch(...) { /* ignore bad values */ }
 	#endif
@@ -341,12 +342,12 @@ void progress::show_unbounded(float value, const std::string & label) {
 	progress_cleared = false;
 }
 
-progress::progress(boost::uint64_t max_value, bool show_value_rate)
+progress::progress(std::uint64_t max_value, bool show_value_rate)
 	: max(max_value), value(0), show_rate(show_value_rate),
-	  start_time(boost::posix_time::microsec_clock::universal_time()),
+	  start_time(std::chrono::steady_clock::now()),
 	  last_status(-1.f), last_time(0), last_rate(0.f) { }
 
-bool progress::update(boost::uint64_t delta, bool force) {
+bool progress::update(std::uint64_t delta, bool force) {
 	
 	if(!show_progress) {
 		return false;
@@ -365,19 +366,20 @@ bool progress::update(boost::uint64_t delta, bool force) {
 		}
 	}
 	
-	boost::uint64_t time;
+	std::uint64_t time;
 	try {
-		boost::posix_time::ptime now(boost::posix_time::microsec_clock::universal_time());
-		time = boost::uint64_t((now - start_time).total_microseconds());
+		std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+		time = std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+			now - start_time).count());
 	} catch(...) {
 		// this shouldn't happen, assume no time has passed
 		time = last_time;
 	}
 	
 	#if defined(_WIN32)
-	const boost::uint64_t update_interval = 100000;
+	const std::uint64_t update_interval = 100000;
 	#else
-	const boost::uint64_t update_interval = 50000;
+	const std::uint64_t update_interval = 50000;
 	#endif
 	if(!force && time - last_time < update_interval) {
 		return false;

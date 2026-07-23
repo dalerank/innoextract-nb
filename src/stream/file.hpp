@@ -27,11 +27,11 @@
 #define INNOEXTRACT_STREAM_FILE_HPP
 
 #include <istream>
+#include <memory>
 
-#include <boost/iostreams/chain.hpp>
+#include "stream/io.hpp"
 
 #include "crypto/checksum.hpp"
-#include "util/unique_ptr.hpp"
 
 namespace stream {
 
@@ -52,8 +52,8 @@ enum compression_filter {
  */
 struct file {
 	
-	boost::uint64_t    offset;   //!< Offset of this file within the decompressed chunk.
-	boost::uint64_t    size;     //!< Pre-filter size of this file in the decompressed chunk.
+	std::uint64_t    offset;   //!< Offset of this file within the decompressed chunk.
+	std::uint64_t    size;     //!< Pre-filter size of this file in the decompressed chunk.
 	
 	crypto::checksum   checksum; //!< Checksum for the file.
 	
@@ -70,13 +70,13 @@ struct file {
  */
 class file_reader {
 	
-	typedef boost::iostreams::chain<boost::iostreams::input> base_type;
+	typedef io::chain base_type;
 	
 public:
 	
-	typedef std::istream                 type;
-	typedef util::unique_ptr<type>::type pointer;
-	typedef file                         file_t;
+	typedef std::istream          type;
+	typedef std::unique_ptr<type> pointer;
+	typedef file                  file_t;
 	
 	/*!
 	 * Wrap a \ref chunk_reader to read a single file.

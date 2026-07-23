@@ -34,8 +34,6 @@
 #include <string>
 #include <vector>
 
-#include <boost/iostreams/categories.hpp>
-
 #include "util/load.hpp"
 #include "util/types.hpp"
 
@@ -204,7 +202,6 @@ public:
 	ansi_console_parser() : in_command(0) { }
 	
 	typedef char char_type;
-	typedef boost::iostreams::sink_tag category;
 	
 	/*!
 	 * \brief Will be called when an ANSI escape sequence has been found

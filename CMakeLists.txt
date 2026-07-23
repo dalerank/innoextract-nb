@@ -85,7 +85,6 @@ option(USE_STATIC_LIBS       "Statically link libraries" ${default_USE_STATIC_LI
 option(LZMA_USE_STATIC_LIBS  "Statically link liblzma"   ${USE_STATIC_LIBS})
 option(ZLIB_USE_STATIC_LIBS  "Statically link libz"      ${USE_STATIC_LIBS})
 option(BZip2_USE_STATIC_LIBS "Statically link libbz2"    ${USE_STATIC_LIBS})
-option(Boost_USE_STATIC_LIBS "Statically link Boost"     ${USE_STATIC_LIBS})
 option(iconv_USE_STATIC_LIBS "Statically link libiconv"  ${USE_STATIC_LIBS})
 
 # Make optional dependencies required
@@ -173,53 +172,18 @@ else()
 	set(INNOEXTRACT_HAVE_LZMA 0)
 endif()
 
-find_package(Boost REQUIRED COMPONENTS
-	iostreams
-	filesystem
-	date_time
-	system
-	program_options
-)
-list(APPEND LIBRARIES ${Boost_LIBRARIES})
-link_directories(${Boost_LIBRARY_DIRS})
-include_directories(SYSTEM ${Boost_INCLUDE_DIR})
-if(NOT Boost_VERSION_MACRO)
-	# CMP0093 changed Boost_VERSION to x.y.z format and provide the old format in Boost_VERSION_MACRO
-	set(Boost_VERSION_MACRO ${Boost_VERSION})
-endif()
-add_definitions(-DBOOST_SYSTEM_DISABLE_THREADS)
-if(win32)
-	add_definitions(-DBOOST_SYSTEM_USE_UTF8)
-endif()
-
-has_static_libs(Boost Boost_LIBRARIES)
-if(Boost_HAS_STATIC_LIBS)
-	foreach(Lib IN ITEMS ZLIB BZip2)
-		string(TOUPPER ${Lib} LIB)
-		string(TOLOWER ${Lib} lib)
-		foreach(static IN ITEMS 1 0)
-			if(static)
-				use_static_libs(${Lib})
-			endif()
-			if(WIN32)
-				find_package(Boost COMPONENTS ${lib} QUIET)
-			endif()
-			if(Boost_${LIB}_FOUND)
-				message (STATUS "Found boost_${lib}")
-				set(${LIB}_LIBRARIES ${Boost_${LIB}_LIBRARY})
-			else()
-				find_package(${Lib} REQUIRED)
-			endif()
-			if(static)
-				use_static_libs_restore()
-			endif()
-			if(${LIB}_LIBRARIES OR STRICT_USE)
-				break()
-			endif()
-		endforeach()
-		list(APPEND LIBRARIES ${${LIB}_LIBRARIES})
-	endforeach()
-endif()
+foreach(Lib IN ITEMS ZLIB BZip2)
+	string(TOUPPER ${Lib} LIB)
+	use_static_libs(${Lib})
+	find_package(${Lib} REQUIRED)
+	use_static_libs_restore()
+	list(APPEND LIBRARIES ${${LIB}_LIBRARIES})
+	if(DEFINED ${LIB}_INCLUDE_DIR)
+		include_directories(SYSTEM ${${LIB}_INCLUDE_DIR})
+	elseif(DEFINED ${LIB}_INCLUDE_DIRS)
+		include_directories(SYSTEM ${${LIB}_INCLUDE_DIRS})
+	endif()
+endforeach()
 
 set(INNOEXTRACT_HAVE_ICONV 0)
 set(INNOEXTRACT_HAVE_WIN32_CONV 0)
@@ -245,9 +209,7 @@ endif()
 
 # Set compiler flags
 
-if(Boost_VERSION_MACRO LESS 104800)
-	# Older Boost versions don't work with C++11
-elseif(NOT CXX_STD_VERSION LESS 2011)
+if(NOT CXX_STD_VERSION LESS 2011)
 	enable_cxx_version(${CXX_STD_VERSION})
 	check_cxx11("alignof" INNOEXTRACT_HAVE_ALIGNOF)
 	if(WIN32)
@@ -439,21 +401,28 @@ set(INNOEXTRACT_SOURCES
 	
 	src/stream/block.hpp
 	src/stream/block.cpp
+	src/stream/bzip2.hpp
+	src/stream/bzip2.cpp
 	src/stream/checksum.hpp
 	src/stream/chunk.hpp
 	src/stream/chunk.cpp
 	src/stream/exefilter.hpp
 	src/stream/file.hpp
 	src/stream/file.cpp
+	src/stream/io.hpp
 	src/stream/lzma.hpp
 	src/stream/lzma.cpp if INNOEXTRACT_HAVE_LZMA
 	src/stream/restrict.hpp
 	src/stream/slice.hpp
 	src/stream/slice.cpp
+	src/stream/symmetric_filter.hpp
+	src/stream/zlib.hpp
+	src/stream/zlib.cpp
 	
 	src/util/align.hpp
 	src/util/ansi.hpp
 	src/util/boostfs_compat.hpp
+	src/util/boostfs_compat.cpp
 	src/util/console.hpp
 	src/util/console.cpp
 	src/util/encoding.hpp

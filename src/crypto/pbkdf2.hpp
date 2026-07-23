@@ -35,7 +35,7 @@
 #include <algorithm>
 #include <cstring>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 namespace crypto {
 	
@@ -84,8 +84,8 @@ struct hmac {
 		std::memset(ikey + length, 0, block_size - length);
 		
 		for(size_t i = 0; i < block_size; i++) {
-			okey[i] = char(boost::uint8_t(ikey[i]) ^ boost::uint8_t(0x5c));
-			ikey[i] = char(boost::uint8_t(ikey[i]) ^ boost::uint8_t(0x36));
+			okey[i] = char(std::uint8_t(ikey[i]) ^ std::uint8_t(0x5c));
+			ikey[i] = char(std::uint8_t(ikey[i]) ^ std::uint8_t(0x36));
 		}
 		
 		T::prepare_state(ikey, 1, istate);
@@ -135,7 +135,7 @@ struct pbkdf2 {
 				mac.update(u, hash_size);
 				mac.finalize(ostate, u);
 				for(size_t j = 0; j < hash_size; j++) {
-					f[j] = char(boost::uint8_t(f[j]) ^ boost::uint8_t(u[j]));
+					f[j] = char(std::uint8_t(f[j]) ^ std::uint8_t(u[j]));
 				}
 			}
 			

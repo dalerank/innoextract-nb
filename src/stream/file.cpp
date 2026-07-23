@@ -20,14 +20,10 @@
 
 #include "stream/file.hpp"
 
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/zlib.hpp>
-
 #include "stream/checksum.hpp"
 #include "stream/exefilter.hpp"
 #include "stream/restrict.hpp"
-
-namespace io = boost::iostreams;
+#include "stream/zlib.hpp"
 
 namespace stream {
 
@@ -54,10 +50,10 @@ bool file::operator==(const file & o) const {
 file_reader::pointer file_reader::get(base_type & base, const file & file,
                                       crypto::checksum * checksum) {
 	
-	util::unique_ptr<io::filtering_istream>::type result(new io::filtering_istream);
+	std::unique_ptr<io::filtering_istream> result(new io::filtering_istream);
 	
 	if(file.filter == ZlibFilter) {
-		result->push(io::zlib_decompressor(), 8192);
+		result->push(zlib_decompressor(), 8192);
 	}
 	
 	if(checksum) {
@@ -72,7 +68,7 @@ file_reader::pointer file_reader::get(base_type & base, const file & file,
 		case ZlibFilter: /* applied *after* calculating the checksum */ break;
 	}
 	
-	result->push(stream::restrict(base, file.size));
+	result->push_device(stream::restrict(stream::ref(base), file.size));
 	
 	result->exceptions(std::ios_base::badbit);
 	

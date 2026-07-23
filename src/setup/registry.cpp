@@ -20,7 +20,7 @@
 
 #include "setup/registry.hpp"
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "setup/info.hpp"
 #include "setup/version.hpp"
@@ -62,7 +62,7 @@ STORED_ENUM_MAP(stored_registry_entry_type_2, registry_entry::None,
 void registry_entry::load(std::istream & is, const info & i) {
 	
 	if(i.version < INNO_VERSION(1, 3, 0)) {
-		(void)util::load<boost::uint32_t>(is); // uncompressed size of the entry
+		(void)util::load<std::uint32_t>(is); // uncompressed size of the entry
 	}
 	
 	is >> util::encoded_string(key, i.codepage, i.header.lead_bytes);
@@ -84,13 +84,13 @@ void registry_entry::load(std::istream & is, const info & i) {
 	load_version_data(is, i.version);
 	
 	if(i.version.bits() != 16) {
-		hive = hive_name(util::load<boost::uint32_t>(is) & ~0x80000000);
+		hive = hive_name(util::load<std::uint32_t>(is) & ~0x80000000);
 	} else {
 		hive = Unset;
 	}
 	
 	if(i.version >= INNO_VERSION(4, 1, 0)) {
-		permission = util::load<boost::int16_t>(is);
+		permission = util::load<std::int16_t>(is);
 	} else {
 		permission = -1;
 	}

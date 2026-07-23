@@ -32,13 +32,13 @@
 
 #include <stddef.h>
 #include <ios>
+#include <memory>
 #include <string>
 
-#include <boost/cstdint.hpp>
-#include <boost/iostreams/chain.hpp>
+#include <cstdint>
 
+#include "stream/io.hpp"
 #include "util/enum.hpp"
-#include "util/unique_ptr.hpp"
 
 namespace stream {
 
@@ -78,13 +78,13 @@ enum encryption_method {
  */
 struct chunk {
 	
-	boost::uint32_t first_slice;    //!< Slice where the chunk starts.
-	boost::uint32_t last_slice;     //!< Slice where the chunk ends.
+	std::uint32_t first_slice;    //!< Slice where the chunk starts.
+	std::uint32_t last_slice;     //!< Slice where the chunk ends.
 	
-	boost::uint32_t sort_offset;
+	std::uint32_t sort_offset;
 	
-	boost::uint32_t offset;         //!< Offset of the compressed chunk in firstSlice.
-	boost::uint64_t size;           //! Total compressed size of the chunk.
+	std::uint32_t offset;         //!< Offset of the compressed chunk in firstSlice.
+	std::uint64_t size;           //! Total compressed size of the chunk.
 	
 	compression_method compression; //!< Compression method used by the chunk.
 	encryption_method encryption;   //!< Encryption method used by the chunk.
@@ -94,8 +94,6 @@ struct chunk {
 	
 };
 
-class silce_source;
-
 /*!
  * Wrapper to read and decompress a chunk from a \ref slice_reader.
  * Restrics the stream to the chunk size and applies the appropriate decompression.
@@ -104,8 +102,8 @@ class chunk_reader {
 	
 public:
 	
-	typedef boost::iostreams::chain<boost::iostreams::input> type;
-	typedef util::unique_ptr<type>::type                     pointer;
+	typedef io::chain               type;
+	typedef std::unique_ptr<type>   pointer;
 	
 	/*!
 	 * Wrap a \ref slice_reader to read and decompress a single chunk.

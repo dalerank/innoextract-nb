@@ -29,7 +29,7 @@
 #include <bitset>
 #include <string>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 namespace util {
 
@@ -144,7 +144,7 @@ enum known_codepages {
 	cp_utf8         = 65001,
 };
 
-typedef boost::uint32_t codepage_id;
+typedef std::uint32_t codepage_id;
 
 /*!
  * Convert a possibly broken UTF-16 string to WTF-8, an extension of UTF-8.

@@ -31,10 +31,7 @@
 #include <bitset>
 #include <ios>
 
-#include <boost/cstdint.hpp>
-#include <boost/static_assert.hpp>
-#include <boost/typeof/typeof.hpp>
-#include <boost/utility/enable_if.hpp>
+#include <cstdint>
 
 #include "util/enum.hpp"
 #include "util/load.hpp"
@@ -43,7 +40,7 @@
 // Shared info for enums and flags
 #define STORED_MAP_HELPER(MapName, TypeRep, DefaultDecl, ...) \
 struct MapName { \
-	typedef BOOST_TYPEOF(TypeRep) enum_type; \
+	typedef decltype(TypeRep) enum_type; \
 	DefaultDecl \
 	static const enum_type values[]; \
 	static const size_t count; \
@@ -75,8 +72,8 @@ public:
 	static const size_t size = Mapping::count;
 	
 	explicit stored_enum(std::istream & is) {
-		BOOST_STATIC_ASSERT(size <= (1 << 8));
-		value = util::load<boost::uint8_t>(is);
+		static_assert(size <= (1 << 8), "static assertion failed");
+		value = util::load<std::uint8_t>(is);
 	}
 	
 	enum_type get() {
@@ -99,7 +96,7 @@ public:
 template <size_t Bits, size_t PadBits = 32>
 class stored_bitfield {
 	
-	typedef boost::uint8_t base_type;
+	typedef std::uint8_t base_type;
 	
 	static const size_t base_size = sizeof(base_type) * 8;
 	static const size_t count = (Bits + (base_size - 1)) / base_size; // ceildiv
@@ -120,14 +117,14 @@ public:
 		}
 	}
 	
-	boost::uint64_t lower_bits() const {
+	std::uint64_t lower_bits() const {
 		
-		BOOST_STATIC_ASSERT(sizeof(boost::uint64_t) % sizeof(base_type) == 0);
+		static_assert(sizeof(std::uint64_t) % sizeof(base_type) == 0, "static assertion failed");
 		
-		boost::uint64_t result = 0;
+		std::uint64_t result = 0;
 		
-		for(size_t i = 0; i < std::min(sizeof(boost::uint64_t) / sizeof(base_type), size_t(count)); i++) {
-			result |= (boost::uint64_t(bits[i]) << (i * base_size));
+		for(size_t i = 0; i < std::min(sizeof(std::uint64_t) / sizeof(base_type), size_t(count)); i++) {
+			result |= (std::uint64_t(bits[i]) << (i * base_size));
 		}
 		
 		return result;
@@ -136,7 +133,7 @@ public:
 	operator std::bitset<size>() const {
 		
 		#define concat(a, b) a##b
-		BOOST_STATIC_ASSERT(sizeof(base_type) <= sizeof(concat(unsi, gned) concat(lo, ng)));
+		static_assert(sizeof(base_type) <= sizeof(concat(unsi, gned) concat(lo, ng)), "static assertion failed");
 		#undef concat
 		
 		std::bitset<size> result(0);
@@ -167,13 +164,13 @@ public:
 	
 	flag_type get() {
 		
-		boost::uint64_t set_bits = this->lower_bits();
+		std::uint64_t set_bits = this->lower_bits();
 		flag_type result = 0;
 		
 		for(size_t i = 0; i < this->size; i++) {
-			if(set_bits & (boost::uint64_t(1) << i)) {
+			if(set_bits & (std::uint64_t(1) << i)) {
 				result |= Mapping::values[i];
-				set_bits &= ~(boost::uint64_t(1) << i);
+				set_bits &= ~(std::uint64_t(1) << i);
 			}
 		}
 		
@@ -206,7 +203,7 @@ private:
 	
 	std::istream & stream;
 	
-	typedef boost::uint8_t stored_type;
+	typedef std::uint8_t stored_type;
 	static const size_t stored_bits = sizeof(stored_type) * 8;
 	
 	size_t pos;

@@ -45,8 +45,8 @@ STORED_ENUM_MAP(stored_sign_mode, data_entry::NoSetting,
 
 void data_entry::load(std::istream & is, const info & i) {
 	
-	chunk.first_slice = util::load<boost::uint32_t>(is, i.version.bits());
-	chunk.last_slice = util::load<boost::uint32_t>(is, i.version.bits());
+	chunk.first_slice = util::load<std::uint32_t>(is, i.version.bits());
+	chunk.last_slice = util::load<std::uint32_t>(is, i.version.bits());
 	if(i.version < INNO_VERSION(4, 0, 0)) {
 		if(chunk.first_slice < 1 || chunk.last_slice < 1) {
 			log_warning << "Unexpected slice number: " << chunk.first_slice
@@ -56,20 +56,20 @@ void data_entry::load(std::istream & is, const info & i) {
 		}
 	}
 	
-	chunk.sort_offset = chunk.offset = util::load<boost::uint32_t>(is);
+	chunk.sort_offset = chunk.offset = util::load<std::uint32_t>(is);
 	
 	if(i.version >= INNO_VERSION(4, 0, 1)) {
-		file.offset = util::load<boost::uint64_t>(is);
+		file.offset = util::load<std::uint64_t>(is);
 	} else {
 		file.offset = 0;
 	}
 	
 	if(i.version >= INNO_VERSION(4, 0, 0)) {
-		file.size = util::load<boost::uint64_t>(is);
-		chunk.size = util::load<boost::uint64_t>(is);
+		file.size = util::load<std::uint64_t>(is);
+		chunk.size = util::load<std::uint64_t>(is);
 	} else {
-		file.size = util::load<boost::uint32_t>(is);
-		chunk.size = util::load<boost::uint32_t>(is);
+		file.size = util::load<std::uint32_t>(is);
+		chunk.size = util::load<std::uint32_t>(is);
 	}
 	uncompressed_size = file.size;
 	
@@ -83,10 +83,10 @@ void data_entry::load(std::istream & is, const info & i) {
 		is.read(file.checksum.md5, std::streamsize(sizeof(file.checksum.md5)));
 		file.checksum.type = crypto::MD5;
 	} else if(i.version >= INNO_VERSION(4, 0, 1)) {
-		file.checksum.crc32 = util::load<boost::uint32_t>(is);
+		file.checksum.crc32 = util::load<std::uint32_t>(is);
 		file.checksum.type = crypto::CRC32;
 	} else {
-		file.checksum.adler32 = util::load<boost::uint32_t>(is);
+		file.checksum.adler32 = util::load<std::uint32_t>(is);
 		file.checksum.type = crypto::Adler32;
 	}
 	
@@ -94,8 +94,8 @@ void data_entry::load(std::istream & is, const info & i) {
 		
 		// 16-bit installers use the FAT filetime format
 		
-		boost::uint16_t time = util::load<boost::uint16_t>(is);
-		boost::uint16_t date = util::load<boost::uint16_t>(is);
+		std::uint16_t time = util::load<std::uint16_t>(is);
+		std::uint16_t date = util::load<std::uint16_t>(is);
 		
 		struct tm t;
 		std::memset(&t, 0, sizeof(t));
@@ -113,23 +113,23 @@ void data_entry::load(std::istream & is, const info & i) {
 		
 		// 32-bit installers use the Win32 FILETIME format
 		
-		boost::int64_t filetime = util::load<boost::int64_t>(is);
+		std::int64_t filetime = util::load<std::int64_t>(is);
 		
-		static const boost::int64_t FiletimeOffset = 0x19DB1DED53E8000ll;
+		static const std::int64_t FiletimeOffset = 0x19DB1DED53E8000ll;
 		if(filetime < FiletimeOffset) {
 			log_warning << "Unexpected filetime: " << filetime;
 		}
 		filetime -= FiletimeOffset;
 		
 		timestamp = filetime / 10000000;
-		timestamp_nsec = boost::uint32_t(filetime % 10000000) * 100;
+		timestamp_nsec = std::uint32_t(filetime % 10000000) * 100;
 		
 	}
 	
-	boost::uint32_t file_version_ms = util::load<boost::uint32_t>(is);
-	boost::uint32_t file_version_ls = util::load<boost::uint32_t>(is);
-	file_version = (boost::uint64_t(file_version_ms) << 32)
-	             |  boost::uint64_t(file_version_ls);
+	std::uint32_t file_version_ms = util::load<std::uint32_t>(is);
+	std::uint32_t file_version_ls = util::load<std::uint32_t>(is);
+	file_version = (std::uint64_t(file_version_ms) << 32)
+	             |  std::uint64_t(file_version_ls);
 	
 	options = 0;
 	

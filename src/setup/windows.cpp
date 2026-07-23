@@ -19,11 +19,11 @@
  */
 
 #include "setup/windows.hpp"
+#include <iterator>
 
 #include <ostream>
 
-#include <boost/cstdint.hpp>
-#include <boost/range/size.hpp>
+#include <cstdint>
 
 #include "setup/version.hpp"
 #include "util/load.hpp"
@@ -35,13 +35,13 @@ const windows_version windows_version::none = { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0
 void windows_version::data::load(std::istream & is, const version & version) {
 	
 	if(version >= INNO_VERSION(1, 3, 19)) {
-		build = util::load<boost::uint16_t>(is);
+		build = util::load<std::uint16_t>(is);
 	} else {
 		build = 0;
 	}
 	
-	minor = util::load<boost::uint8_t>(is);
-	major = util::load<boost::uint8_t>(is);
+	minor = util::load<std::uint8_t>(is);
+	major = util::load<std::uint8_t>(is);
 	
 }
 
@@ -51,8 +51,8 @@ void windows_version::load(std::istream & is, const version & version) {
 	nt_version.load(is, version);
 	
 	if(version >= INNO_VERSION(1, 3, 19)) {
-		nt_service_pack.minor = util::load<boost::uint8_t>(is);
-		nt_service_pack.major = util::load<boost::uint8_t>(is);
+		nt_service_pack.minor = util::load<std::uint8_t>(is);
+		nt_service_pack.major = util::load<std::uint8_t>(is);
 	} else {
 		nt_service_pack.major = 0, nt_service_pack.minor = 0;
 	}
@@ -110,9 +110,9 @@ const char * get_version_name(const windows_version::data & version, bool nt = f
 	windows_version_name * names;
 	size_t count;
 	if(nt) {
-		names = windows_nt_version_names, count = size_t(boost::size(windows_nt_version_names));
+		names = windows_nt_version_names, count = size_t(std::size(windows_nt_version_names));
 	} else {
-		names = windows_version_names, count = size_t(boost::size(windows_version_names));
+		names = windows_version_names, count = size_t(std::size(windows_version_names));
 	}
 	
 	for(size_t i = 0; i < count; i++) {

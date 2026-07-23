@@ -32,12 +32,12 @@ void arc4::init(const char * key, size_t length) {
 	a = b = 0;
 	
 	for(size_t i = 0; i < sizeof(state); i++){
-		state[i] = boost::uint8_t(i);
+		state[i] = std::uint8_t(i);
 	}
 	
 	size_t j = 0;
 	for(size_t i = 0; i < sizeof(state); i++) {
-		j = (j + state[i] + boost::uint8_t(key[i % length])) % sizeof(state);
+		j = (j + state[i] + std::uint8_t(key[i % length])) % sizeof(state);
 		std::swap(state[i], state[j]);
 	}
 	
@@ -64,19 +64,19 @@ void arc4::crypt(const char * in, char * out, size_t length) {
 	
 	for(size_t i = 0; i < length; i++) {
 		update();
-		out[i] = char(state[size_t(state[a] + state[b]) % sizeof(state)] ^ boost::uint8_t(in[i]));
+		out[i] = char(state[size_t(state[a] + state[b]) % sizeof(state)] ^ std::uint8_t(in[i]));
 	}
 	
 }
 
 INNOEXTRACT_TEST(arc4,
 	
-	const boost::uint8_t key[] = {
+	const std::uint8_t key[] = {
 		0x7f, 0xe5, 0x54, 0xd3, 0x47, 0x1e, 0xc7, 0xba, 0xb3, 0x37,
 		0x4f, 0xfd, 0x46, 0xb3, 0x88, 0x85, 0x12, 0x2b, 0x13, 0x14
 	};
 	
-	const boost::uint8_t ciphertext[] = {
+	const std::uint8_t ciphertext[] = {
 		0x06, 0x58, 0x8c, 0x39, 0xf8, 0xc7, 0xf3, 0xbd, 0x17, 0x74, 0x7c, 0x84, 0xd1, 0xaf, 0x6c, 0xcf,
 		0x51, 0x98, 0x8a, 0x32, 0xe5, 0x25, 0x4a, 0xae, 0x04, 0xda, 0x18, 0xa7, 0x02, 0xd7, 0xe5, 0x34,
 		0x0a, 0x34, 0x3a, 0x7c, 0xc1, 0x9c, 0x9c, 0xb4, 0x07, 0xf6, 0x52, 0x31, 0x49, 0x21, 0x7f, 0xc2,

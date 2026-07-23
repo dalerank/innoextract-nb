@@ -19,6 +19,7 @@
  */
 
 #include "cli/gog.hpp"
+#include <iterator>
 
 #include <stddef.h>
 #include <cstring>
@@ -27,11 +28,8 @@
 #include <iostream>
 #include <signal.h>
 
-#include <boost/cstdint.hpp>
-#include <boost/foreach.hpp>
-#include <boost/noncopyable.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem/operations.hpp>
+#include <cstdint>
+#include <filesystem>
 
 #include "cli/extract.hpp"
 
@@ -52,9 +50,42 @@
 #include "util/log.hpp"
 #include "util/process.hpp"
 
-namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
 
 namespace gog {
+
+namespace {
+
+//! Locale-independent ASCII case-insensitive comparison, equivalent to boost::iequals()
+//! for the (ASCII-only) registry keys/names handled here.
+bool iequals(const std::string & a, const std::string & b) {
+	if(a.size() != b.size()) {
+		return false;
+	}
+	for(size_t i = 0; i < a.size(); i++) {
+		char ca = a[i], cb = b[i];
+		if(ca >= 'A' && ca <= 'Z') { ca = char(ca - 'A' + 'a'); }
+		if(cb >= 'A' && cb <= 'Z') { cb = char(cb - 'A' + 'a'); }
+		if(ca != cb) {
+			return false;
+		}
+	}
+	return true;
+}
+
+//! Equivalent to boost::istarts_with() for ASCII-only inputs.
+bool istarts_with(const std::string & s, const char * prefix) {
+	size_t n = std::strlen(prefix);
+	return s.size() >= n && iequals(s.substr(0, n), std::string(prefix, n));
+}
+
+//! Equivalent to boost::iends_with() for ASCII-only inputs.
+bool iends_with(const std::string & s, const char * suffix) {
+	size_t n = std::strlen(suffix);
+	return s.size() >= n && iequals(s.substr(s.size() - n), std::string(suffix, n));
+}
+
+} // anonymous namespace
 
 std::string get_game_id(const setup::info & info) {
 	
@@ -63,9 +94,9 @@ std::string get_game_id(const setup::info & info) {
 	const char * prefix = "SOFTWARE\\GOG.com\\Games\\";
 	size_t prefix_length = std::strlen(prefix);
 	
-	BOOST_FOREACH(const setup::registry_entry & entry, info.registry_entries) {
+	for(const setup::registry_entry & entry : info.registry_entries) {
 		
-		if(!boost::istarts_with(entry.key, prefix)) {
+		if(!istarts_with(entry.key, prefix)) {
 			continue;
 		}
 		
@@ -73,7 +104,7 @@ std::string get_game_id(const setup::info & info) {
 			continue;
 		}
 		
-		if(boost::iequals(entry.name, "gameID")) {
+		if(iequals(entry.name, "gameID")) {
 			id = entry.value;
 			util::to_utf8(id, info.codepage);
 			break;
@@ -157,7 +188,7 @@ bool process_file_unrar(const std::string & file, const extract_options & o, con
 	
 	args.push_back(file.c_str());
 	
-	std::string dir = o.output_dir.string();
+	std::string dir = util::as_string(o.output_dir);
 	if(!dir.empty()) {
 		if(dir[dir.length() - 1] != '/' && dir[dir.length() - 1] != '\\') {
 			#if defined(_WIN32)
@@ -189,7 +220,7 @@ bool process_file_unrar(const std::string & file, const extract_options & o, con
 
 bool process_file_unar(const std::string & file, const extract_options & o, const std::string & password) {
 	
-	std::string dir = o.output_dir.string();
+	std::string dir = util::as_string(o.output_dir);
 	
 	std::vector<const char *> args;
 	if(o.extract) {
@@ -251,12 +282,15 @@ char hex_char(int c) {
 	}
 }
 
-class temporary_directory : private boost::noncopyable {
+class temporary_directory {
 	
 	fs::path parent;
 	fs::path path;
 	
 public:
+	
+	temporary_directory(const temporary_directory &) = delete;
+	temporary_directory & operator=(const temporary_directory &) = delete;
 	
 	explicit temporary_directory(const fs::path & base) {
 		try {
@@ -310,10 +344,10 @@ void process_rar_files(const std::vector<fs::path> & files,
 		md5.update(password.c_str(), password.length());
 		char hash[16];
 		md5.finalize(hash);
-		password.resize(size_t(boost::size(hash) * 2));
-		for(size_t i = 0; i < size_t(boost::size(hash)); i++) {
-			password[2 * i + 0] = hex_char(boost::uint8_t(hash[i]) / 16);
-			password[2 * i + 1] = hex_char(boost::uint8_t(hash[i]) % 16);
+		password.resize(size_t(std::size(hash) * 2));
+		for(size_t i = 0; i < size_t(std::size(hash)); i++) {
+			password[2 * i + 0] = hex_char(std::uint8_t(hash[i]) / 16);
+			password[2 * i + 1] = hex_char(std::uint8_t(hash[i]) % 16);
 		}
 	}
 	
@@ -322,8 +356,8 @@ void process_rar_files(const std::vector<fs::path> & files,
 		// When listing contents or for single-file archives, pass the bin file to unrar
 		
 		bool ok = true;
-		BOOST_FOREACH(const fs::path & file, files) {
-			if(!process_rar_file(file.string(), o, password)) {
+		for(const fs::path & file : files) {
+			if(!process_rar_file(util::as_string(file), o, password)) {
 				ok = false;
 			}
 		}
@@ -358,13 +392,13 @@ void process_rar_files(const std::vector<fs::path> & files,
 			fs::path here = fs::current_path();
 			
 			std::string basename = util::as_string(files.front().stem());
-			if(boost::ends_with(basename, "-1")) {
+			if(iends_with(basename, "-1")) {
 				basename.resize(basename.length() - 2);
 			}
 			
 			size_t i = 0;
 			std::ostringstream oss;
-			BOOST_FOREACH(const fs::path & file, files) {
+			for(const fs::path & file : files) {
 				
 				oss.str(std::string());
 				oss << basename << ".r" << std::setfill('0') << std::setw(2) << i;
@@ -385,11 +419,11 @@ void process_rar_files(const std::vector<fs::path> & files,
 			
 		} catch(...) {
 			throw std::runtime_error("Could not " + get_verb(o)
-			                         + " \"" + files.front().string()
+			                         + " \"" + util::as_string(files.front())
 			                         + "\": unable to create .r?? symlinks");
 		}
 		
-		if(process_rar_file(first_file.string(), o, password)) {
+		if(process_rar_file(util::as_string(first_file), o, password)) {
 			return;
 		}
 		
@@ -408,7 +442,7 @@ void process_rar_files(const std::vector<fs::path> & files,
 		
 	}
 	
-	throw std::runtime_error("Could not " + get_verb(o) + " \"" + files.front().string()
+	throw std::runtime_error("Could not " + get_verb(o) + " \"" + util::as_string(files.front())
 	                         + "\": install `unrar` or `unar`");
 }
 
@@ -417,11 +451,11 @@ void process_bin_files(const std::vector<fs::path> & files, const extract_option
 	
 	util::ifstream ifs(files.front(), std::ios_base::in | std::ios_base::binary);
 	if(!ifs.is_open()) {
-		throw std::runtime_error("Could not open file \"" + files.front().string() + '"');
+		throw std::runtime_error("Could not open file \"" + util::as_string(files.front()) + '"');
 	}
 	
 	char magic[4];
-	if(!ifs.read(magic, std::streamsize(boost::size(magic))).fail()) {
+	if(!ifs.read(magic, std::streamsize(std::size(magic))).fail()) {
 		
 		if(std::memcmp(magic, "Rar!", 4) == 0) {
 			ifs.close();
@@ -445,7 +479,7 @@ void process_bin_files(const std::vector<fs::path> & files, const extract_option
 		
 	}
 	
-	throw std::runtime_error("Could not " + get_verb(o) + " \"" + files.front().string()
+	throw std::runtime_error("Could not " + get_verb(o) + " \"" + util::as_string(files.front())
 	                         + "\": unknown filetype");
 }
 
@@ -498,7 +532,7 @@ size_t probe_bin_file_series(const extract_options & o, const setup::info & info
 void probe_bin_files(const extract_options & o, const setup::info & info,
                      const fs::path & setup_file, bool external) {
 	
-	boost::filesystem::path dir = setup_file.parent_path();
+	fs::path dir = setup_file.parent_path();
 	std::string basename = util::as_string(setup_file.stem());
 	
 	size_t bin_count = 0;
@@ -506,9 +540,9 @@ void probe_bin_files(const extract_options & o, const setup::info & info,
 	bin_count += probe_bin_file_series(o, info, dir, basename + "-0" + ".bin");
 	
 
-	boost::uint32_t max_slice = 0;
+	std::uint32_t max_slice = 0;
 	if(external) {
-		BOOST_FOREACH(const setup::data_entry & location, info.data_entries) {
+		for(const setup::data_entry & location : info.data_entries) {
 			max_slice = std::max(max_slice, location.chunk.first_slice);
 			max_slice = std::max(max_slice, location.chunk.last_slice);
 		}

@@ -29,7 +29,7 @@
 #include <string>
 #include <iosfwd>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "setup/windows.hpp"
 #include "util/enum.hpp"
@@ -57,7 +57,7 @@ struct component_entry {
 	std::string languages;
 	std::string check;
 	
-	boost::uint64_t extra_disk_pace_required;
+	std::uint64_t extra_disk_pace_required;
 	
 	int level;
 	bool used;
@@ -66,7 +66,7 @@ struct component_entry {
 	
 	flags options;
 	
-	boost::uint64_t size;
+	std::uint64_t size;
 	
 	void load(std::istream & is, const info & i);
 	

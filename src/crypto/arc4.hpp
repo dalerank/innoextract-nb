@@ -28,7 +28,7 @@
 
 #include <stddef.h>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "configure.hpp"
 
@@ -49,7 +49,7 @@ private:
 	
 	void update();
 	
-	boost::uint8_t state[256];
+	std::uint8_t state[256];
 	size_t a, b;
 	
 };

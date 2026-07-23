@@ -18,31 +18,22 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#include "chunk.hpp"
+#include "stream/chunk.hpp"
 
 #include <cstring>
-
-#include <boost/iostreams/char_traits.hpp>
-#include <boost/iostreams/concepts.hpp>
-#include <boost/iostreams/read.hpp>
-#include <boost/iostreams/filter/bzip2.hpp>
-#include <boost/iostreams/filter/zlib.hpp>
-#include <boost/make_shared.hpp>
-#include <boost/range/size.hpp>
 
 #include "release.hpp"
 #include "crypto/arc4.hpp"
 #include "crypto/checksum.hpp"
 #include "crypto/hasher.hpp"
 #include "crypto/xchacha20.hpp"
+#include "stream/bzip2.hpp"
 #include "stream/lzma.hpp"
 #include "stream/restrict.hpp"
 #include "stream/slice.hpp"
+#include "stream/zlib.hpp"
 #include "util/endian.hpp"
 #include "util/log.hpp"
-
-
-namespace io = boost::iostreams;
 
 namespace stream {
 
@@ -55,16 +46,9 @@ const char chunk_id[4] = { 'z', 'l', 'b', 0x1a };
 /*!
  * Filter to en-/decrypt files files stored by Inno Setup.
  */
-class inno_arc4_crypter : public boost::iostreams::multichar_input_filter {
-	
-private:
-	
-	typedef boost::iostreams::multichar_input_filter base_type;
+class inno_arc4_crypter {
 	
 public:
-	
-	typedef base_type::char_type char_type;
-	typedef base_type::category category;
 	
 	inno_arc4_crypter(const char * key, size_t length) {
 		
@@ -76,7 +60,7 @@ public:
 	template <typename Source>
 	std::streamsize read(Source & src, char * dest, std::streamsize n) {
 		
-		std::streamsize length = boost::iostreams::read(src, dest, n);
+		std::streamsize length = io::read(src, dest, n);
 		if(length != EOF) {
 			arc4.crypt(dest, dest, size_t(n));
 		}
@@ -93,16 +77,9 @@ private:
 /*!
  * Filter to en-/decrypt files files stored by Inno Setup.
  */
-class inno_xchacha20_crypter : public boost::iostreams::multichar_input_filter {
-	
-private:
-	
-	typedef boost::iostreams::multichar_input_filter base_type;
+class inno_xchacha20_crypter {
 	
 public:
-	
-	typedef base_type::char_type char_type;
-	typedef base_type::category category;
 	
 	inno_xchacha20_crypter(const char key[32], const char nonce[24]) {
 		
@@ -113,7 +90,7 @@ public:
 	template <typename Source>
 	std::streamsize read(Source & src, char * dest, std::streamsize n) {
 		
-		std::streamsize length = boost::iostreams::read(src, dest, n);
+		std::streamsize length = io::read(src, dest, n);
 		if(length != EOF) {
 			xchacha20.crypt(dest, dest, size_t(n));
 		}
@@ -167,12 +144,12 @@ chunk_reader::pointer chunk_reader::get(slice_reader & base, const chunk & chunk
 		throw chunk_error("bad chunk magic");
 	}
 	
-	pointer result(new boost::iostreams::chain<boost::iostreams::input>);
+	pointer result(new io::chain);
 	
 	switch(chunk.compression) {
 		case Stored: break;
-		case Zlib:   result->push(io::zlib_decompressor(), 8192); break;
-		case BZip2:  result->push(io::bzip2_decompressor(), 8192); break;
+		case Zlib:   result->push(zlib_decompressor(), 8192); break;
+		case BZip2:  result->push(bzip2_decompressor(), 8192); break;
 	#if INNOEXTRACT_HAVE_LZMA
 		case LZMA1:  result->push(inno_lzma1_decompressor(), 8192); break;
 		case LZMA2:  result->push(inno_lzma2_decompressor(), 8192); break;
@@ -208,8 +185,8 @@ chunk_reader::pointer chunk_reader::get(slice_reader & base, const chunk & chunk
 			}
 			char nonce[crypto::xchacha20::nonce_size];
 			std::memcpy(nonce, key.c_str() + crypto::xchacha20::key_size, crypto::xchacha20::nonce_size);
-			util::little_endian::store(util::little_endian::load<boost::uint64_t>(nonce) ^ chunk.offset, nonce);
-			util::little_endian::store(util::little_endian::load<boost::uint32_t>(nonce + 8) ^ chunk.first_slice, nonce + 8);
+			util::little_endian::store(util::little_endian::load<std::uint64_t>(nonce) ^ chunk.offset, nonce);
+			util::little_endian::store(util::little_endian::load<std::uint32_t>(nonce + 8) ^ chunk.first_slice, nonce + 8);
 			result->push(inno_xchacha20_crypter(key.c_str(), nonce), 8192);
 			break;
 		}
@@ -218,7 +195,7 @@ chunk_reader::pointer chunk_reader::get(slice_reader & base, const chunk & chunk
 		#endif
 	}
 	
-	result->push(restrict(base, chunk.size));
+	result->push_device(restrict(ref(base), chunk.size));
 	
 	return result;
 }

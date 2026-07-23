@@ -21,14 +21,14 @@
 #include "util/load.hpp"
 
 #include <algorithm>
-
-#include <boost/lexical_cast.hpp>
+#include <cctype>
+#include <limits>
 
 namespace util {
 
 void binary_string::load(std::istream & is, std::string & target) {
 	
-	boost::uint32_t length = util::load<boost::uint32_t>(is);
+	std::uint32_t length = util::load<std::uint32_t>(is);
 	if(is.fail()) {
 		return;
 	}
@@ -37,7 +37,7 @@ void binary_string::load(std::istream & is, std::string & target) {
 	
 	while(length) {
 		char buffer[10 * 1024];
-		boost::uint32_t buf_size = std::min(length, boost::uint32_t(sizeof(buffer)));
+		std::uint32_t buf_size = std::min(length, std::uint32_t(sizeof(buffer)));
 		is.read(buffer, std::streamsize(buf_size));
 		target.append(buffer, buf_size);
 		length -= buf_size;
@@ -46,7 +46,7 @@ void binary_string::load(std::istream & is, std::string & target) {
 
 void binary_string::skip(std::istream & is) {
 	
-	boost::uint32_t length = util::load<boost::uint32_t>(is);
+	std::uint32_t length = util::load<std::uint32_t>(is);
 	if(is.fail()) {
 		return;
 	}
@@ -61,11 +61,24 @@ void encoded_string::load(std::istream & is, std::string & target, codepage_id c
 }
 
 unsigned to_unsigned(const char * chars, size_t count) {
-#if BOOST_VERSION < 105200
-	return boost::lexical_cast<unsigned>(std::string(chars, count));
-#else
-	return boost::lexical_cast<unsigned>(chars, count);
-#endif
+	
+	if(count == 0) {
+		throw bad_number_cast();
+	}
+	
+	unsigned long value = 0;
+	for(size_t i = 0; i < count; i++) {
+		unsigned char c = static_cast<unsigned char>(chars[i]);
+		if(c < '0' || c > '9') {
+			throw bad_number_cast();
+		}
+		value = value * 10 + static_cast<unsigned long>(c - '0');
+		if(value > std::numeric_limits<unsigned>::max()) {
+			throw bad_number_cast();
+		}
+	}
+	
+	return unsigned(value);
 }
 
 } // namespace util

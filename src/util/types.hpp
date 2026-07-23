@@ -26,44 +26,39 @@
 #ifndef INNOEXTRACT_UTIL_TYPES_HPP
 #define INNOEXTRACT_UTIL_TYPES_HPP
 
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 
-#include <boost/version.hpp>
-#include <boost/integer/static_min_max.hpp>
-#include <boost/integer.hpp>
-
 namespace util {
-
-#if BOOST_VERSION < 104200
 
 template <int Bits>
 struct uint_t { };
 template <>
-struct uint_t<8>  : public boost::uint_t<8>  { typedef boost::uint8_t exact; };
+struct uint_t<8>  { typedef std::uint8_t  exact; };
 template <>
-struct uint_t<16> : public boost::uint_t<16> { typedef boost::uint16_t exact; };
+struct uint_t<16> { typedef std::uint16_t exact; };
 template <>
-struct uint_t<32> : public boost::uint_t<32> { typedef boost::uint32_t exact; };
+struct uint_t<32> { typedef std::uint32_t exact; };
 template <>
-struct uint_t<64>                            { typedef boost::uint64_t exact; };
+struct uint_t<64> { typedef std::uint64_t exact; };
 
 template <int Bits>
 struct int_t { };
 template <>
-struct int_t<8>  : public boost::int_t<8>  { typedef boost::int8_t exact; };
+struct int_t<8>  { typedef std::int8_t  exact; };
 template <>
-struct int_t<16> : public boost::int_t<16> { typedef boost::int16_t exact; };
+struct int_t<16> { typedef std::int16_t exact; };
 template <>
-struct int_t<32> : public boost::int_t<32> { typedef boost::int32_t exact; };
+struct int_t<32> { typedef std::int32_t exact; };
 template <>
-struct int_t<64>                           { typedef boost::int64_t exact; };
+struct int_t<64> { typedef std::int64_t exact; };
 
-#else
-
-using boost::uint_t;
-using boost::int_t;
-
-#endif
+//! Get the minimum of two compile-time constants.
+template <std::size_t A, std::size_t B>
+struct static_unsigned_min {
+	static const std::size_t value = (A < B) ? A : B;
+};
 
 /*!
  * Get an with a specific bit size and signedness,
@@ -77,13 +72,13 @@ struct compatible_integer {
 template <class Base, size_t Bits>
 struct compatible_integer<Base, Bits, false> {
 	typedef typename uint_t<
-		boost::static_unsigned_min<Bits, sizeof(Base) * 8>::value
+		static_unsigned_min<Bits, sizeof(Base) * 8>::value
 	>::exact type;
 };
 template <class Base, size_t Bits>
 struct compatible_integer<Base, Bits, true> {
 	typedef typename int_t<
-		boost::static_unsigned_min<Bits, sizeof(Base) * 8>::value
+		static_unsigned_min<Bits, sizeof(Base) * 8>::value
 	>::exact type;
 };
 

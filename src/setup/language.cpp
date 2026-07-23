@@ -19,11 +19,10 @@
  */
 
 #include "setup/language.hpp"
+#include <iterator>
 
 #include <algorithm>
 
-#include "boost/range/begin.hpp"
-#include "boost/range/end.hpp"
 
 #include "setup/info.hpp"
 #include "setup/version.hpp"
@@ -35,18 +34,18 @@ namespace {
 
 struct windows_language {
 	
-	boost::uint16_t language_id;
-	boost::uint16_t codepage;
+	std::uint16_t language_id;
+	std::uint16_t codepage;
 	
 };
 
-bool operator<(windows_language language, boost::uint32_t language_id) {
+bool operator<(windows_language language, std::uint32_t language_id) {
 	return language.language_id < language_id;
 }
 
 #if defined(__clang_major__) && __clang_major__ < 8 && defined(_LIBCPP_DEBUG)
 // Required for debug builds with Clang < 8
-bool operator<(boost::uint32_t language_id, windows_language language) {
+bool operator<(std::uint32_t language_id, windows_language language) {
 	return language_id < language.language_id;
 }
 #endif
@@ -115,10 +114,10 @@ const windows_language languages[] = {
 	{ 0x4001, util::cp_windows1256 },
 };
 
-util::codepage_id default_codepage_for_language(boost::uint32_t language) {
+util::codepage_id default_codepage_for_language(std::uint32_t language) {
 	
-	const windows_language * entry = std::lower_bound(boost::begin(languages), boost::end(languages), language);
-	if(entry != boost::end(languages) && entry->language_id == language) {
+	const windows_language * entry = std::lower_bound(std::begin(languages), std::end(languages), language);
+	if(entry != std::end(languages) && entry->language_id == language) {
 		return entry->codepage;
 	}
 	
@@ -156,18 +155,18 @@ void language_entry::load(std::istream & is, const info & i) {
 		license_text.clear(), info_before.clear(), info_after.clear();
 	}
 	
-	language_id = util::load<boost::uint32_t>(is);
+	language_id = util::load<std::uint32_t>(is);
 	
 	if(i.version < INNO_VERSION(4, 2, 2)) {
 		codepage = default_codepage_for_language(language_id);
 	} else if(!i.version.is_unicode()) {
-		codepage = util::load<boost::uint32_t>(is);
+		codepage = util::load<std::uint32_t>(is);
 		if(!codepage) {
 			codepage = util::cp_windows1252;
 		}
 	} else {
 		if(i.version < INNO_VERSION(5, 3, 0)) {
-			(void)util::load<boost::uint32_t>(is);
+			(void)util::load<std::uint32_t>(is);
 		}
 		codepage = util::cp_utf16le;
 	}
@@ -178,20 +177,20 @@ void language_entry::load(std::istream & is, const info & i) {
 		util::to_utf8(language_name, codepage);
 	}
 	
-	dialog_font_size = util::load<boost::uint32_t>(is);
+	dialog_font_size = util::load<std::uint32_t>(is);
 	
 	if(i.version < INNO_VERSION(4, 1, 0)) {
-		dialog_font_standard_height = util::load<boost::uint32_t>(is);
+		dialog_font_standard_height = util::load<std::uint32_t>(is);
 	} else {
 		dialog_font_standard_height = 0;
 	}
 	
-	title_font_size = util::load<boost::uint32_t>(is);
-	welcome_font_size = util::load<boost::uint32_t>(is);
-	copyright_font_size = util::load<boost::uint32_t>(is);
+	title_font_size = util::load<std::uint32_t>(is);
+	welcome_font_size = util::load<std::uint32_t>(is);
+	copyright_font_size = util::load<std::uint32_t>(is);
 	
 	if(i.version == INNO_VERSION_EXT(5, 5, 7, 1)) {
-		util::load<boost::uint32_t>(is); // always 8 or 9?
+		util::load<std::uint32_t>(is); // always 8 or 9?
 	}
 	
 	if(i.version >= INNO_VERSION(5, 2, 3)) {

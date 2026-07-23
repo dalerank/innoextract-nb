@@ -21,7 +21,7 @@
 /*!
  * \file
  *
- * LZMA 1 and 2 (aka xz) descompression filters to be used with boost::iostreams.
+ * LZMA 1 and 2 (aka xz) descompression filters to be used with \ref stream::io.
  */
 #ifndef INNOEXTRACT_STREAM_LZMA_HPP
 #define INNOEXTRACT_STREAM_LZMA_HPP
@@ -33,8 +33,7 @@
 #include <stddef.h>
 #include <iosfwd>
 
-#include <boost/iostreams/filter/symmetric.hpp>
-#include <boost/noncopyable.hpp>
+#include "stream/symmetric_filter.hpp"
 
 namespace stream {
 
@@ -52,11 +51,19 @@ private:
 	int error_code;
 };
 
-class lzma_decompressor_impl_base : private boost::noncopyable {
+class lzma_decompressor_impl_base {
 	
 public:
 	
 	typedef char char_type;
+	
+	lzma_decompressor_impl_base(const lzma_decompressor_impl_base &) = delete;
+	lzma_decompressor_impl_base & operator=(const lzma_decompressor_impl_base &) = delete;
+	
+	lzma_decompressor_impl_base(lzma_decompressor_impl_base && o) noexcept : stream(o.stream) {
+		o.stream = NULL;
+	}
+	lzma_decompressor_impl_base & operator=(lzma_decompressor_impl_base &&) = delete;
 	
 	~lzma_decompressor_impl_base() { close(); }
 	
@@ -101,35 +108,25 @@ public:
 	
 };
 
-template <class Impl, class Allocator = std::allocator<typename Impl::char_type> >
-class lzma_decompressor : public boost::iostreams::symmetric_filter<Impl, Allocator> {
-	
-public:
-	
-	explicit lzma_decompressor(int buffer_size = boost::iostreams::default_device_buffer_size)
-		: boost::iostreams::symmetric_filter<Impl, Allocator>(buffer_size) { }
-	
-};
-
 /*!
  * A filter that decompressess LZMA1 streams found in Inno Setup installers,
- * to be used with boost::iostreams.
+ * to be used with \ref stream::io.
  *
  * The LZMA1 streams used by Inno Setup differ slightly from the LZMA Alone file format:
  * The stream header only stores the properties (lc, lp, pb) and the dictionary size and
  * is missing the uncompressed size field. The fiels that are present are encoded
  * identically.
  */
-typedef lzma_decompressor<inno_lzma1_decompressor_impl> inno_lzma1_decompressor;
+typedef symmetric_filter<inno_lzma1_decompressor_impl> inno_lzma1_decompressor;
 
 /*!
  * A filter that decompressess LZMA2 streams found in Inno Setup installers,
- * to be used with boost::iostreams.
+ * to be used with \ref stream::io.
  *
  * Inno Setup uses raw LZMA2 streams.
  * (preceded only by the dictionary size encoded as one byte)
  */
-typedef lzma_decompressor<inno_lzma2_decompressor_impl> inno_lzma2_decompressor;
+typedef symmetric_filter<inno_lzma2_decompressor_impl> inno_lzma2_decompressor;
 
 } // namespace stream
 

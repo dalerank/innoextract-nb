@@ -26,12 +26,12 @@
 #ifndef INNOEXTRACT_CLI_EXTRACT_HPP
 #define INNOEXTRACT_CLI_EXTRACT_HPP
 
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-#include <boost/cstdint.hpp>
-#include <boost/filesystem/path.hpp>
+#include <cstdint>
 
 #include "setup/filename.hpp"
 
@@ -81,7 +81,7 @@ struct extract_options {
 	std::string language; //!< Extract only files for this language
 	std::vector<std::string> include; //!< Extract only files matching these patterns
 	
-	boost::uint32_t codepage;
+	std::uint32_t codepage;
 	
 	setup::filename_map filenames;
 	CollisionAction collisions;
@@ -89,7 +89,7 @@ struct extract_options {
 	
 	std::string password;
 	
-	boost::filesystem::path output_dir;
+	std::filesystem::path output_dir;
 	
 	extract_options()
 		: quiet(false)
@@ -117,6 +117,6 @@ struct extract_options {
 	
 };
 
-void process_file(const boost::filesystem::path & installer, const extract_options & o);
+void process_file(const std::filesystem::path & installer, const extract_options & o);
 
 #endif // INNOEXTRACT_CLI_EXTRACT_HPP

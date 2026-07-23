@@ -26,11 +26,9 @@
 #ifndef INNOEXTRACT_STREAM_SLICE_HPP
 #define INNOEXTRACT_STREAM_SLICE_HPP
 
+#include <filesystem>
 #include <ios>
 #include <string>
-
-#include <boost/iostreams/concepts.hpp>
-#include <boost/filesystem/path.hpp>
 
 #include "util/fstream.hpp"
 
@@ -54,12 +52,12 @@ struct slice_error : public std::ios_base::failure {
  * (read by \ref chunk_reader), which in turn contain one or more  \ref file "files"
  * (read by \ref file_reader).
  */
-class slice_reader : public boost::iostreams::source {
+class slice_reader {
 	
-	typedef boost::filesystem::path path_type;
+	typedef std::filesystem::path path_type;
 	
 	// Information for reading embedded setup data
-	const boost::uint32_t data_offset;
+	const std::uint32_t data_offset;
 	
 	// Information for eading external setup data
 	path_type    dir;             //!< Slice directory specified at construction.
@@ -69,7 +67,7 @@ class slice_reader : public boost::iostreams::source {
 	
 	// Information about the current slice
 	size_t          current_slice; //!< Number of the currently opened slice.
-	boost::uint32_t slice_size;    //!< Size in bytes of the currently opened slice.
+	std::uint32_t slice_size;    //!< Size in bytes of the currently opened slice.
 	
 	// Streams
 	util::ifstream ifs; //!< File input stream used when reading from external slices.
@@ -97,7 +95,7 @@ public:
 	 * The constructed reader will allow reading the byte range [data_offset, file end)
 	 * from the setup executable and provide this as the range [0, file end - data_offset).
 	 */
-	slice_reader(std::istream * istream, boost::uint32_t offset);
+	slice_reader(std::istream * istream, std::uint32_t offset);
 	
 	/*!
 	 * Construct a \ref slice_reader to read from external data slices (aka disks).
@@ -126,7 +124,7 @@ public:
 	 * \return \c false if the requested slice could not be opened, or if the requested
 	 *         offset is not a valid position in that slice - \c true otherwise.
 	 */
-	bool seek(size_t slice, boost::uint32_t offset);
+	bool seek(size_t slice, std::uint32_t offset);
 	
 	/*!
 	 * Read a number of bytes starting at the current slice and offset within that slice.

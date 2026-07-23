@@ -28,11 +28,11 @@
 
 #include <bitset>
 #include <cstring>
+#include <exception>
 #include <istream>
 #include <string>
 
-#include <boost/cstdint.hpp>
-#include <boost/range/size.hpp>
+#include <cstdint>
 
 #include "util/encoding.hpp"
 #include "util/endian.hpp"
@@ -157,7 +157,7 @@ T load(std::istream & is) { return load<T, little_endian>(is); }
 
 //! Load a bool value
 inline bool load_bool(std::istream & is) {
-	return !!load<boost::uint8_t>(is);
+	return !!load<std::uint8_t>(is);
 }
 
 /*!
@@ -191,12 +191,12 @@ T load(std::istream & is, size_t bits) { return load<T, little_endian>(is, bits)
  * \param bytes Number of bytes to skip ahead
  */
 template <class T>
-void discard(T & is, boost::uint64_t bytes) {
+void discard(T & is, std::uint64_t bytes) {
 	char buf[1024];
 	while(bytes) {
-		std::streamsize n = std::streamsize(std::min<boost::uint64_t>(bytes, sizeof(buf)));
+		std::streamsize n = std::streamsize(std::min<std::uint64_t>(bytes, sizeof(buf)));
 		is.read(buf, n);
-		bytes -= boost::uint64_t(n);
+		bytes -= std::uint64_t(n);
 	}
 }
 
@@ -216,9 +216,14 @@ T get_bits(T number, unsigned first, unsigned last) {
 	return T(data & mask);
 }
 
+//! Exception thrown by \ref to_unsigned() when the input cannot be parsed.
+struct bad_number_cast : public std::exception {
+	const char * what() const noexcept override { return "bad number cast"; }
+};
+
 /*!
  * Parse an ASCII representation of an unsigned integer
- * \throws boost::bad_lexical_cast on error
+ * \throws bad_number_cast on error
  */
 unsigned to_unsigned(const char * chars, size_t count);
 

@@ -28,7 +28,7 @@
 
 #include <stddef.h>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "configure.hpp"
 
@@ -44,7 +44,7 @@ struct xchacha20 {
 		nonce_size = 24,
 	};
 	
-	typedef boost::uint32_t word;
+	typedef std::uint32_t word;
 	
 	void init(const char key[key_size], const char nonce[nonce_size]);
 	
@@ -66,7 +66,7 @@ private:
 	
 	word state[16];
 	word keystream[16];
-	boost::uint8_t pos;
+	std::uint8_t pos;
 	
 	#ifdef INNOEXTRACT_BUILD_TESTS
 	friend struct xchacha20_test;

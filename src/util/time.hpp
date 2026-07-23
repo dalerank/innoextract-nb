@@ -27,14 +27,14 @@
 #define INNOEXTRACT_UTIL_TIME_HPP
 
 #include <ctime>
+#include <filesystem>
 #include <string>
 
-#include <boost/cstdint.hpp>
-#include <boost/filesystem/path.hpp>
+#include <cstdint>
 
 namespace util {
 
-typedef boost::int64_t time;
+typedef std::int64_t time;
 
 /*!
  * Convert UTC clock time to a timestamp
@@ -80,7 +80,7 @@ void set_local_timezone(std::string timezone);
  *
  * \return \c true if the file time was changed, \c false otherwise.
  */
-bool set_file_time(const boost::filesystem::path & path, time sec, boost::uint32_t nsec);
+bool set_file_time(const std::filesystem::path & path, time sec, std::uint32_t nsec);
 
 } // namespace util
 

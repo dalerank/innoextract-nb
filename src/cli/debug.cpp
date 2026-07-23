@@ -19,13 +19,11 @@
  */
 
 #include "cli/debug.hpp"
+#include <iterator>
 
 #include <ctime>
+#include <filesystem>
 #include <iostream>
-
-#include <boost/foreach.hpp>
-#include <boost/filesystem/operations.hpp>
-#include <boost/range/size.hpp>
 
 #include "loader/offsets.hpp"
 
@@ -50,13 +48,14 @@
 
 #include "stream/block.hpp"
 
+#include "util/boostfs_compat.hpp"
 #include "util/fstream.hpp"
 #include "util/load.hpp"
 #include "util/log.hpp"
 #include "util/output.hpp"
 #include "util/time.hpp"
 
-namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
 
 void print_offsets(const loader::offsets & offsets) {
 	
@@ -225,7 +224,7 @@ static void print_entry(const setup::info & info, size_t i,
 	}
 	
 	std::cout << if_not_zero("  Attributes", entry.attributes);
-	std::cout << if_not_equal("  Permission entry", entry.permission, boost::int16_t(-1));
+	std::cout << if_not_equal("  Permission entry", entry.permission, std::int16_t(-1));
 	std::cout << if_not_zero("  Options", entry.options);
 }
 
@@ -237,7 +236,7 @@ static void print_entry(const setup::info & info, size_t i,
 	} else {
 		std::cout << " - " << quoted(entry.destination);
 	}
-	if(entry.location != boost::uint32_t(-1)) {
+	if(entry.location != std::uint32_t(-1)) {
 		std::cout << " (location: " << color::cyan << entry.location << color::reset << ')';
 	}
 	std::cout  << '\n';
@@ -250,7 +249,7 @@ static void print_entry(const setup::info & info, size_t i,
 	
 	std::cout << if_not_zero("  Attributes", entry.attributes);
 	std::cout << if_not_zero("  Size", entry.external_size);
-	std::cout << if_not_equal("  Permission entry", entry.permission, boost::int16_t(-1));
+	std::cout << if_not_equal("  Permission entry", entry.permission, std::int16_t(-1));
 	std::cout << if_not_zero("  Options", entry.options);
 	std::cout << if_not_equal("  Type", entry.type, setup::file_entry::UserFile);
 }
@@ -541,7 +540,7 @@ static const char * magic_numbers[][2] = {
 
 static const char * guess_extension(const std::string & data) {
 	
-	for(size_t i = 0; i < size_t(boost::size(magic_numbers)); i++) {
+	for(size_t i = 0; i < size_t(std::size(magic_numbers)); i++) {
 		
 		size_t n = strlen(magic_numbers[i][0]);
 		
@@ -634,7 +633,7 @@ static void dump_headers(std::istream & is, const setup::version & version, cons
 			throw std::exception();
 		}
 	} catch(...) {
-		throw std::runtime_error("Could not open output file \"" + path.string() + '"');
+		throw std::runtime_error("Could not open output file \"" + util::as_string(path) + '"');
 	}
 	
 	try {

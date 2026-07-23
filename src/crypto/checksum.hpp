@@ -30,7 +30,7 @@
 #include <iosfwd>
 #include <istream>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "util/endian.hpp"
 #include "util/enum.hpp"
@@ -51,8 +51,8 @@ enum checksum_type {
 struct checksum {
 	
 	union {
-		boost::uint32_t adler32;
-		boost::uint32_t crc32;
+		std::uint32_t adler32;
+		std::uint32_t crc32;
 		char md5[16];
 		char sha1[20];
 		char sha256[32];

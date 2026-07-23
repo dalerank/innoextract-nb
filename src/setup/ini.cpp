@@ -20,7 +20,7 @@
 
 #include "setup/ini.hpp"
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "setup/info.hpp"
 #include "setup/version.hpp"
@@ -44,7 +44,7 @@ STORED_FLAGS_MAP(stored_ini_flags,
 void ini_entry::load(std::istream & is, const info & i) {
 	
 	if(i.version < INNO_VERSION(1, 3, 0)) {
-		(void)util::load<boost::uint32_t>(is); // uncompressed size of the entry
+		(void)util::load<std::uint32_t>(is); // uncompressed size of the entry
 	}
 	
 	is >> util::encoded_string(inifile, i.codepage, i.header.lead_bytes);

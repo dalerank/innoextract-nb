@@ -29,7 +29,7 @@
 namespace crypto {
 
 /* Table of CRC-32's of all single byte values (made by makecrc.c) */
-static const boost::uint32_t crc32_table[] = {
+static const std::uint32_t crc32_table[] = {
 	0x00000000l, 0x77073096l, 0xee0e612cl, 0x990951bal, 0x076dc419l,
 	0x706af48fl, 0xe963a535l, 0x9e6495a3l, 0x0edb8832l, 0x79dcb8a4l,
 	0xe0d5e91el, 0x97d2d988l, 0x09b64c2bl, 0x7eb17cbdl, 0xe7b82d07l,
@@ -84,22 +84,22 @@ static const boost::uint32_t crc32_table[] = {
 	0x2d02ef8dl
 };
 
-static boost::uint8_t crc32_index(boost::uint32_t crc) {
-	return boost::uint8_t(crc & 0xff);
+static std::uint8_t crc32_index(std::uint32_t crc) {
+	return std::uint8_t(crc & 0xff);
 }
 
-static boost::uint32_t crc32_shifted(boost::uint32_t crc) {
+static std::uint32_t crc32_shifted(std::uint32_t crc) {
 	return crc >> 8;
 }
 
 void crc32::update(const char * data, size_t length) {
 	
 	for(; (size_t(data) % 4 != 0) && length > 0; length--) {
-		crc = crc32_table[crc32_index(crc) ^ boost::uint8_t(*data++)] ^ crc32_shifted(crc);
+		crc = crc32_table[crc32_index(crc) ^ std::uint8_t(*data++)] ^ crc32_shifted(crc);
 	}
 	
 	while(length >= 4) {
-		crc ^= util::little_endian::load<boost::uint32_t>(data);
+		crc ^= util::little_endian::load<std::uint32_t>(data);
 		crc = crc32_table[crc32_index(crc)] ^ crc32_shifted(crc);
 		crc = crc32_table[crc32_index(crc)] ^ crc32_shifted(crc);
 		crc = crc32_table[crc32_index(crc)] ^ crc32_shifted(crc);
@@ -109,7 +109,7 @@ void crc32::update(const char * data, size_t length) {
 	}
 	
 	while(length--) {
-		crc = crc32_table[crc32_index(crc) ^ boost::uint8_t(*data++)] ^ crc32_shifted(crc);
+		crc = crc32_table[crc32_index(crc) ^ std::uint8_t(*data++)] ^ crc32_shifted(crc);
 	}
 	
 }

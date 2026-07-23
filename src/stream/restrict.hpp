@@ -21,32 +21,33 @@
 /*!
  * \file
  *
- * Wrapper class for a boost::iostreams-compatible source that can be used to restrict
+ * Wrapper class for a Source (see \ref stream::io) that can be used to restrict
  * sources to appear smaller than they really are.
  */
 #ifndef INNOEXTRACT_STREAM_RESTRICT_HPP
 #define INNOEXTRACT_STREAM_RESTRICT_HPP
 
-#include <boost/cstdint.hpp>
-#include <boost/iostreams/concepts.hpp>
-#include <boost/iostreams/read.hpp>
+#include <algorithm>
+#include <cstdint>
+#include <utility>
+
+#include "stream/io.hpp"
 
 namespace stream {
 
-//! Like boost::iostreams::restriction, but always has a 64-bit counter.
+//! Restricts a Source to a specific size from the current position, always using a
+//! 64-bit counter. The BaseSource is stored by value - use \ref ref() to wrap sources
+//! whose lifetime is managed elsewhere and that should not be copied/moved.
 template <typename BaseSource>
-class restricted_source : public boost::iostreams::source {
+class restricted_source {
 	
-	BaseSource &    base;      //!< The base source to read from.
-	boost::uint64_t remaining; //!< Number of bytes remaining in the restricted source.
+	BaseSource    base;      //!< The base source to read from.
+	std::uint64_t remaining; //!< Number of bytes remaining in the restricted source.
 	
 public:
 	
-	restricted_source(const restricted_source & o)
-		: base(o.base), remaining(o.remaining) { }
-	
-	restricted_source(BaseSource & source, boost::uint64_t size)
-		: base(source), remaining(size) { }
+	restricted_source(BaseSource source, std::uint64_t size)
+		: base(std::move(source)), remaining(size) { }
 	
 	std::streamsize read(char * buffer, std::streamsize bytes) {
 		
@@ -55,16 +56,16 @@ public:
 		}
 		
 		// Restrict the number of bytes to read
-		bytes = std::streamsize(std::min(boost::uint64_t(bytes), remaining));
+		bytes = std::streamsize(std::min(std::uint64_t(bytes), remaining));
 		if(bytes == 0) {
 			return -1; // End of the restricted source reached
 		}
 		
-		std::streamsize nread = boost::iostreams::read(base, buffer, bytes);
+		std::streamsize nread = io::read(base, buffer, bytes);
 		
 		// Remember how many bytes were read so far
 		if(nread > 0) {
-			remaining -= std::min(boost::uint64_t(nread), remaining);
+			remaining -= std::min(std::uint64_t(nread), remaining);
 		}
 		
 		return nread;
@@ -76,11 +77,37 @@ public:
  * Restricts a source to a specific size from the current position and makes
  * it non-seekable.
  *
- * Like boost::iostreams::restrict, but always has a 64-bit counter.
+ * \c source is stored by value in the result - pass a lightweight adapter
+ * (e.g. \ref ref_source, via \ref ref()) if the underlying object should not be
+ * copied or moved.
  */
 template <typename BaseSource>
-restricted_source<BaseSource> restrict(BaseSource & source, boost::uint64_t size) {
-	return restricted_source<BaseSource>(source, size);
+restricted_source<BaseSource> restrict(BaseSource source, std::uint64_t size) {
+	return restricted_source<BaseSource>(std::move(source), size);
+}
+
+//! Lightweight Source that forwards read() to a referenced object whose lifetime is
+//! managed elsewhere. Useful for wrapping non-copyable sources (like slice_reader or
+//! io::chain) so they can be used with \ref restrict() and \ref io::chain::push_device.
+template <typename T>
+class ref_source {
+	
+	T * ptr;
+	
+public:
+	
+	explicit ref_source(T & object) : ptr(&object) { }
+	
+	std::streamsize read(char * buffer, std::streamsize n) {
+		return ptr->read(buffer, n);
+	}
+	
+};
+
+//! \return a \ref ref_source wrapping \c object by reference.
+template <typename T>
+ref_source<T> ref(T & object) {
+	return ref_source<T>(object);
 }
 
 } // namespace stream

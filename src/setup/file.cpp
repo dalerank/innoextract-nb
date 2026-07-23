@@ -78,7 +78,7 @@ void file_entry::load(std::istream & is, const info & i) {
 	options = 0;
 	
 	if(i.version < INNO_VERSION(1, 3, 0)) {
-		(void)util::load<boost::uint32_t>(is); // uncompressed size of the entry
+		(void)util::load<std::uint32_t>(is); // uncompressed size of the entry
 	}
 	
 	is >> util::encoded_string(source, i.codepage, i.header.lead_bytes);
@@ -94,10 +94,10 @@ void file_entry::load(std::istream & is, const info & i) {
 	
 	load_version_data(is, i.version);
 	
-	location = util::load<boost::uint32_t>(is, i.version.bits());
-	attributes = util::load<boost::uint32_t>(is, i.version.bits());
-	external_size = (i.version >= INNO_VERSION(4, 0, 0)) ? util::load<boost::uint64_t>(is)
-	                                                     : util::load<boost::uint32_t>(is);
+	location = util::load<std::uint32_t>(is, i.version.bits());
+	attributes = util::load<std::uint32_t>(is, i.version.bits());
+	external_size = (i.version >= INNO_VERSION(4, 0, 0)) ? util::load<std::uint64_t>(is)
+	                                                     : util::load<std::uint32_t>(is);
 	
 	if(i.version < INNO_VERSION(3, 0, 5)) {
 		file_copy_mode copyMode = stored_enum<stored_file_copy_mode>(is).get();
@@ -110,9 +110,9 @@ void file_entry::load(std::istream & is, const info & i) {
 	}
 	
 	if(i.version >= INNO_VERSION(4, 1, 0)) {
-		permission = util::load<boost::int16_t>(is);
+		permission = util::load<std::int16_t>(is);
 	} else {
-		permission = boost::int16_t(-1);
+		permission = std::int16_t(-1);
 	}
 	
 	stored_flag_reader<flags> flagreader(is, i.version.bits());

@@ -20,7 +20,7 @@
 
 #include "setup/message.hpp"
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "setup/info.hpp"
 #include "setup/language.hpp"
@@ -36,9 +36,9 @@ void message_entry::load(std::istream & is, const info & i) {
 	is >> util::encoded_string(name, i.codepage);
 	is >> util::binary_string(value);
 	
-	language = util::load<boost::int32_t>(is);
+	language = util::load<std::int32_t>(is);
 	
-	boost::uint32_t codepage;
+	std::uint32_t codepage;
 	if(language < 0) {
 		codepage = i.codepage;
 	} else if(size_t(language) >= i.languages.size()) {

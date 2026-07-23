@@ -27,10 +27,9 @@
 #define INNOEXTRACT_UTIL_ENUM_HPP
 
 #include <stddef.h>
+#include <iterator>
 #include <ostream>
-
-#include <boost/range/size.hpp>
-#include <boost/utility/enable_if.hpp>
+#include <type_traits>
 
 #include "util/console.hpp"
 #include "util/flags.hpp"
@@ -71,7 +70,7 @@ struct enum_names {
 	const char * enum_names<get_enum<Enum>::type>::name = (Name); \
 	const char * enum_names<get_enum<Enum>::type>::names[] = { __VA_ARGS__ }; \
 	const size_t enum_names<get_enum<Enum>::type>::count \
-	 = size_t(boost::size(enum_names<get_enum<Enum>::type>::names));
+	 = size_t(std::size(enum_names<get_enum<Enum>::type>::names));
 
 #define USE_ENUM_NAMES(Enum) \
 	(void)enum_names<get_enum<Enum>::type>::count; \
@@ -83,7 +82,7 @@ struct enum_names {
 	USE_ENUM_NAMES(Flags)
 
 template <class Enum>
-typename boost::enable_if_c<enum_names<Enum>::named, std::ostream &>::type
+typename std::enable_if<bool(enum_names<Enum>::named), std::ostream &>::type
 operator<<(std::ostream & os, Enum value) {
 	if(value >= Enum(0)) {
 		size_t i = size_t(value);

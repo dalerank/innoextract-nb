@@ -29,9 +29,9 @@
 // Taken from Crypto++ and modified to fit the project.
 
 #include <cstring>
+#include <iterator>
 
-#include <boost/cstdint.hpp>
-#include <boost/range/size.hpp>
+#include <cstdint>
 
 #include "crypto/checksum.hpp"
 #include "util/align.hpp"
@@ -146,7 +146,7 @@ size_t iterated_hash<T>::hash(hash_word state[hash_size], const char * input, si
 		do {
 			
 			hash_word aligned_buffer[block_size / sizeof(hash_word)];
-			byte_order::load(input, aligned_buffer, size_t(boost::size(aligned_buffer)));
+			byte_order::load(input, aligned_buffer, size_t(std::size(aligned_buffer)));
 			
 			transform::transform(state, aligned_buffer);
 			

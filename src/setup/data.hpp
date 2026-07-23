@@ -29,7 +29,7 @@
 #include <stddef.h>
 #include <iosfwd>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "crypto/checksum.hpp"
 #include "stream/chunk.hpp"
@@ -65,12 +65,12 @@ struct data_entry {
 	
 	stream::file file;
 	
-	boost::uint64_t uncompressed_size;
+	std::uint64_t uncompressed_size;
 	
-	boost::int64_t timestamp;
-	boost::uint32_t timestamp_nsec;
+	std::int64_t timestamp;
+	std::uint32_t timestamp_nsec;
 	
-	boost::uint64_t file_version;
+	std::uint64_t file_version;
 	
 	flags options;
 	

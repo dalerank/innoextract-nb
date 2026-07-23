@@ -27,10 +27,10 @@
 #define INNOEXTRACT_UTIL_OUTPUT_HPP
 
 #include <ostream>
+#include <iterator>
 #include <string>
 
-#include <boost/cstdint.hpp>
-#include <boost/range/size.hpp>
+#include <cstdint>
 
 #include "util/console.hpp"
 
@@ -46,7 +46,7 @@ inline std::ostream & operator<<(std::ostream & os, const quoted & q) {
 	color::shell_command prev = color::current;
 	os << '"' << color::green;
 	for(std::string::const_iterator i = q.str.begin(); i != q.str.end(); ++i) {
-		boost::uint8_t c = boost::uint8_t(*i);
+		std::uint8_t c = std::uint8_t(*i);
 		if(c < ' ' && c != '\t' && c != '\r' && c != '\n') {
 			std::ios_base::fmtflags old = os.flags();
 			os << color::red << '<' << std::hex << std::setfill('0') << std::setw(2)
@@ -159,7 +159,7 @@ inline std::ostream & operator<<(std::ostream & os, const print_hex_string & s) 
 	
 	os << std::hex;
 	for(size_t i = 0; i < s.size; i++) {
-		os << std::setw(2) << int(boost::uint8_t(s.data[i]));
+		os << std::setw(2) << int(std::uint8_t(s.data[i]));
 	}
 	
 	os.fill(oldfill);
@@ -212,12 +212,12 @@ struct print_bytes {
 template <class T>
 std::ostream & operator<<(std::ostream & os, const print_bytes<T> & s) {
 	
-	size_t frac = size_t(1024 * (s.value - T(boost::uint64_t(s.value))));
-	boost::uint64_t whole = boost::uint64_t(s.value);
+	size_t frac = size_t(1024 * (s.value - T(std::uint64_t(s.value))));
+	std::uint64_t whole = std::uint64_t(s.value);
 	
 	size_t i = 0;
 	
-	while(whole >= 1024 && i < size_t(boost::size(byte_size_units)) - 1) {
+	while(whole >= 1024 && i < size_t(std::size(byte_size_units)) - 1) {
 		frac = whole % 1024, whole /= 1024;
 		i++;
 	}

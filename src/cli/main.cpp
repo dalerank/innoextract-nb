@@ -19,17 +19,17 @@
  */
 
 #include <cstring>
+#include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
+#include <limits>
+#include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <boost/foreach.hpp>
-#include <boost/program_options.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/filesystem/operations.hpp>
 
 #include "release.hpp"
 
@@ -37,20 +37,253 @@
 
 #include "setup/version.hpp"
 
+#include "util/boostfs_compat.hpp"
 #include "util/console.hpp"
 #include "util/fstream.hpp"
 #include "util/log.hpp"
 #include "util/time.hpp"
 #include "util/windows.hpp"
 
-namespace fs = boost::filesystem;
-namespace po = boost::program_options;
+namespace fs = std::filesystem;
 
 enum ExitValues {
 	ExitSuccess = 0,
 	ExitUserError = 1,
 	ExitDataError = 2
 };
+
+namespace {
+
+//! Locale-independent ASCII case-insensitive comparison, equivalent to boost::iequals()
+//! for the (ASCII-only) values handled here.
+bool iequals(const std::string & a, const std::string & b) {
+	if(a.size() != b.size()) {
+		return false;
+	}
+	for(size_t i = 0; i < a.size(); i++) {
+		char ca = a[i], cb = b[i];
+		if(ca >= 'A' && ca <= 'Z') { ca = char(ca - 'A' + 'a'); }
+		if(cb >= 'A' && cb <= 'Z') { cb = char(cb - 'A' + 'a'); }
+		if(ca != cb) {
+			return false;
+		}
+	}
+	return true;
+}
+
+//! Error thrown by \ref option_parser on invalid command-lines.
+struct cli_error : public std::runtime_error {
+	explicit cli_error(const std::string & msg) : std::runtime_error(msg) { }
+};
+
+/*!
+ * Minimal hand-rolled replacement for boost::program_options, supporting just the
+ * subset of functionality (long/short flags, "=value" or space-separated values,
+ * boolean flags with an implicit value, repeatable options and positional arguments)
+ * that innoextract's command-line actually uses.
+ */
+class option_parser {
+	
+	struct spec {
+		std::string long_name;
+		char short_name;
+		bool has_value;
+		bool is_bool;  // value is optional and defaults to "true" if omitted
+		bool multi;    // option can be repeated, values are accumulated
+	};
+	
+	std::vector<spec> specs;
+	std::map<std::string, size_t> by_long;
+	std::map<char, size_t> by_short;
+	
+	std::map<std::string, size_t> counts;
+	std::map<std::string, std::string> values;
+	std::map<std::string, std::vector<std::string> > multi_values;
+	std::vector<std::string> positional_args;
+	
+	void set_value(const spec & s, const std::string & value) {
+		if(s.multi) {
+			multi_values[s.long_name].push_back(value);
+		} else {
+			values[s.long_name] = value;
+		}
+		counts[s.long_name]++;
+	}
+	
+	void set_flag(const spec & s) {
+		counts[s.long_name]++;
+	}
+	
+public:
+	
+	void add(const std::string & long_name, char short_name = 0, bool has_value = false,
+	         bool is_bool = false, bool multi = false) {
+		spec s;
+		s.long_name = long_name, s.short_name = short_name;
+		s.has_value = has_value, s.is_bool = is_bool, s.multi = multi;
+		specs.push_back(s);
+		by_long[long_name] = specs.size() - 1;
+		if(short_name) {
+			by_short[short_name] = specs.size() - 1;
+		}
+	}
+	
+	void parse(int argc, char * const argv[]) {
+		
+		bool options_ended = false;
+		
+		for(int i = 1; i < argc; i++) {
+			
+			std::string arg = argv[i];
+			
+			if(!options_ended && arg == "--") {
+				options_ended = true;
+				continue;
+			}
+			
+			if(!options_ended && arg.size() >= 2 && arg[0] == '-' && arg[1] == '-') {
+				
+				// Long option: --name or --name=value
+				std::string name = arg.substr(2);
+				std::string value;
+				bool has_explicit_value = false;
+				size_t eq = name.find('=');
+				if(eq != std::string::npos) {
+					value = name.substr(eq + 1);
+					name = name.substr(0, eq);
+					has_explicit_value = true;
+				}
+				
+				std::map<std::string, size_t>::const_iterator it = by_long.find(name);
+				if(it == by_long.end()) {
+					throw cli_error("unrecognised option '--" + name + "'");
+				}
+				const spec & s = specs[it->second];
+				
+				if(!s.has_value) {
+					if(has_explicit_value) {
+						throw cli_error("option '--" + name + "' does not take a value");
+					}
+					set_flag(s);
+				} else if(s.is_bool) {
+					set_value(s, has_explicit_value ? value : "true");
+				} else {
+					if(!has_explicit_value) {
+						if(i + 1 >= argc) {
+							throw cli_error("option '--" + name + "' requires a value");
+						}
+						value = argv[++i];
+					}
+					set_value(s, value);
+				}
+				
+				continue;
+			}
+			
+			if(!options_ended && arg.size() >= 2 && arg[0] == '-') {
+				
+				// One or more short options, possibly grouped: -e, -el, -dvalue, -d value
+				size_t pos = 1;
+				while(pos < arg.size()) {
+					
+					char c = arg[pos];
+					std::map<char, size_t>::const_iterator it = by_short.find(c);
+					if(it == by_short.end()) {
+						throw cli_error(std::string("unrecognised option '-") + c + "'");
+					}
+					const spec & s = specs[it->second];
+					
+					if(!s.has_value) {
+						set_flag(s);
+						pos++;
+						continue;
+					}
+					
+					// The rest of this token (if any) is the option's value.
+					std::string rest = arg.substr(pos + 1);
+					if(!rest.empty() && rest[0] == '=') {
+						rest = rest.substr(1);
+					}
+					
+					if(!rest.empty()) {
+						set_value(s, rest);
+					} else if(s.is_bool) {
+						set_value(s, "true");
+					} else {
+						if(i + 1 >= argc) {
+							throw cli_error(std::string("option '-") + c + "' requires a value");
+						}
+						set_value(s, argv[++i]);
+					}
+					
+					break; // the remainder of the token was consumed as the value
+					
+				}
+				
+				continue;
+			}
+			
+			positional_args.push_back(arg);
+			
+		}
+		
+	}
+	
+	bool count(const std::string & name) const {
+		return counts.count(name) != 0;
+	}
+	
+	bool has(const std::string & name) const {
+		return values.count(name) != 0;
+	}
+	
+	const std::string & value(const std::string & name) const {
+		return values.at(name);
+	}
+	
+	const std::vector<std::string> & values_of(const std::string & name) const {
+		static const std::vector<std::string> empty_result;
+		std::map<std::string, std::vector<std::string> >::const_iterator it = multi_values.find(name);
+		return (it != multi_values.end()) ? it->second : empty_result;
+	}
+	
+	const std::vector<std::string> & positional() const {
+		return positional_args;
+	}
+	
+};
+
+//! Parse an unsigned 32-bit integer command-line argument.
+std::uint32_t parse_uint32(const std::string & s) {
+	if(s.empty()) {
+		throw cli_error("expected a number, got \"\"");
+	}
+	size_t pos = 0;
+	unsigned long value;
+	try {
+		value = std::stoul(s, &pos);
+	} catch(...) {
+		throw cli_error("expected a number, got \"" + s + '"');
+	}
+	if(pos != s.size() || value > std::numeric_limits<std::uint32_t>::max()) {
+		throw cli_error("expected a number, got \"" + s + '"');
+	}
+	return std::uint32_t(value);
+}
+
+struct option_info {
+	const char * args;
+	const char * description;
+};
+
+void print_option_group(std::ostream & os, const char * title, const option_info * options, size_t count) {
+	os << '\n' << title << ":\n";
+	for(size_t i = 0; i < count; i++) {
+		os << "  " << std::left << std::setw(28) << options[i].args << options[i].description << '\n';
+	}
+}
+
+} // anonymous namespace
 
 static const char * get_command(const char * argv0) {
 	
@@ -95,12 +328,75 @@ static void print_version(const extract_options & o) {
 	}
 }
 
-static void print_help(const char * name, const po::options_description & visible) {
+static void print_help(const char * name) {
+	
 	std::cout << color::white << "Usage: " << name << " [options] <setup file(s)>\n\n"
 	          << color::reset;
 	std::cout << "Extract files from an Inno Setup installer.\n";
 	std::cout << "For multi-part installers only specify the exe file.\n";
-	std::cout << visible << '\n';
+	
+	static const option_info generic[] = {
+		{ "-h [ --help ]",          "Show supported options" },
+		{ "-v [ --version ]",       "Print version information" },
+		{ "--license",              "Show license information" },
+	};
+	print_option_group(std::cout, "Generic options", generic, std::size(generic));
+	
+	static const option_info action[] = {
+		{ "-t [ --test ]",          "Only verify checksums, don't write anything" },
+		{ "-e [ --extract ]",       "Extract files (default action)" },
+		{ "-l [ --list ]",          "Only list files, don't write anything" },
+		{ "--list-sizes",           "List file sizes" },
+		{ "--list-checksums",       "List file checksums" },
+		{ "-i [ --info ]",          "Print information about the installer" },
+		{ "--list-languages",       "List languages supported by the installer" },
+		{ "--gog-game-id",          "Determine the installer's GOG.com game ID" },
+		{ "--show-password",       "Show password check information" },
+		{ "--check-password",      "Abort if the password is incorrect" },
+		{ "-V [ --data-version ]",  "Only print the data version" },
+#ifdef DEBUG
+		{ "--dump-headers",         "Dump decompressed setup headers" },
+#endif
+	};
+	print_option_group(std::cout, "Actions", action, std::size(action));
+	
+	static const option_info modifiers[] = {
+		{ "--codepage arg",             "Encoding for ANSI strings" },
+		{ "--collisions arg",           "How to handle duplicate files" },
+		{ "--default-language arg",     "Default language for renaming" },
+		{ "--dump",                     "Dump contents without converting filenames" },
+		{ "-L [ --lowercase ]",         "Convert extracted filenames to lower-case" },
+		{ "-T [ --timestamps ] arg",    "Timezone for file times or \"local\" or \"none\"" },
+		{ "-d [ --output-dir ] arg",    "Extract files into the given directory" },
+		{ "-P [ --password ] arg",      "Password for encrypted files" },
+		{ "--password-file arg",        "File to load password from" },
+		{ "-g [ --gog ]",               "Extract additional archives from GOG.com installers" },
+		{ "--no-gog-galaxy",            "Don't re-assemble GOG Galaxy file parts" },
+		{ "-n [ --no-extract-unknown ]", "Don't extract unknown Inno Setup versions" },
+	};
+	print_option_group(std::cout, "Modifiers", modifiers, std::size(modifiers));
+	
+	static const option_info filter[] = {
+		{ "-m [ --exclude-temp ]",  "Don't extract temporary files" },
+		{ "--language arg",         "Extract only files for this language" },
+		{ "--language-only",        "Only extract language-specific files" },
+		{ "-I [ --include ] arg",   "Extract only files that match this path" },
+	};
+	print_option_group(std::cout, "Filters", filter, std::size(filter));
+	
+	static const option_info display[] = {
+		{ "-q [ --quiet ]",         "Output less information" },
+		{ "-s [ --silent ]",        "Output only error/warning information" },
+		{ "--no-warn-unused",       "Don't warn on unused .bin files" },
+		{ "-c [ --color ] arg",     "Enable/disable color output" },
+		{ "-p [ --progress ] arg",  "Enable/disable the progress bar" },
+#ifdef DEBUG
+		{ "--debug",                "Output debug information" },
+#endif
+	};
+	print_option_group(std::cout, "Display options", display, std::size(display));
+	
+	std::cout << '\n';
 	std::cout << "Extracts installers created by " << color::cyan
 	          << innosetup_versions << color::reset << '\n';
 	std::cout << '\n';
@@ -121,150 +417,122 @@ static void print_license() {
 
 int main(int argc, char * argv[]) {
 	
-	po::options_description generic("Generic options");
-	generic.add_options()
-		("help,h", "Show supported options")
-		("version,v", "Print version information")
-		("license", "Show license information")
-	;
+	option_parser parser;
 	
-	po::options_description action("Actions");
-	action.add_options()
-		("test,t", "Only verify checksums, don't write anything")
-		("extract,e", "Extract files (default action)")
-		("list,l", "Only list files, don't write anything")
-		("list-sizes", "List file sizes")
-		("list-checksums", "List file checksums")
-		("info,i", "Print information about the installer")
-		("list-languages", "List languages supported by the installer")
-		("gog-game-id", "Determine the installer's GOG.com game ID")
-		("show-password", "Show password check information")
-		("check-password", "Abort if the password is incorrect")
-		("data-version,V", "Only print the data version")
-		#ifdef DEBUG
-		("dump-headers", "Dump decompressed setup headers")
-		#endif
-	;
+	// Generic options
+	parser.add("help", 'h');
+	parser.add("version", 'v');
+	parser.add("license");
 	
-	po::options_description modifiers("Modifiers");
-	modifiers.add_options()
-		("codepage", po::value<boost::uint32_t>(), "Encoding for ANSI strings")
-		("collisions", po::value<std::string>(), "How to handle duplicate files")
-		("default-language", po::value<std::string>(), "Default language for renaming")
-		("dump", "Dump contents without converting filenames")
-		("lowercase,L", "Convert extracted filenames to lower-case")
-		("timestamps,T", po::value<std::string>(), "Timezone for file times or \"local\" or \"none\"")
-		("output-dir,d", po::value<std::string>(), "Extract files into the given directory")
-		("password,P", po::value<std::string>(), "Password for encrypted files")
-		("password-file", po::value<std::string>(), "File to load password from")
-		("gog,g", "Extract additional archives from GOG.com installers")
-		("no-gog-galaxy", "Don't re-assemble GOG Galaxy file parts")
-		("no-extract-unknown,n", "Don't extract unknown Inno Setup versions")
-	;
+	// Actions
+	parser.add("test", 't');
+	parser.add("extract", 'e');
+	parser.add("list", 'l');
+	parser.add("list-sizes");
+	parser.add("list-checksums");
+	parser.add("info", 'i');
+	parser.add("list-languages");
+	parser.add("gog-game-id");
+	parser.add("show-password");
+	parser.add("check-password");
+	parser.add("data-version", 'V');
+#ifdef DEBUG
+	parser.add("dump-headers");
+#endif
 	
-	po::options_description filter("Filters");
-	filter.add_options()
-		("exclude-temp,m", "Don't extract temporary files")
-		("language", po::value<std::string>(), "Extract only files for this language")
-		("language-only", "Only extract language-specific files")
-		("include,I", po::value< std::vector<std::string> >(), "Extract only files that match this path")
-	;
+	// Modifiers
+	parser.add("codepage", 0, true);
+	parser.add("collisions", 0, true);
+	parser.add("default-language", 0, true);
+	parser.add("dump");
+	parser.add("lowercase", 'L');
+	parser.add("timestamps", 'T', true);
+	parser.add("output-dir", 'd', true);
+	parser.add("password", 'P', true);
+	parser.add("password-file", 0, true);
+	parser.add("gog", 'g');
+	parser.add("no-gog-galaxy");
+	parser.add("no-extract-unknown", 'n');
 	
-	po::options_description io("Display options");
-	io.add_options()
-		("quiet,q", "Output less information")
-		("silent,s", "Output only error/warning information")
-		("no-warn-unused", "Don't warn on unused .bin files")
-		("color,c", po::value<bool>()->implicit_value(true), "Enable/disable color output")
-		("progress,p", po::value<bool>()->implicit_value(true), "Enable/disable the progress bar")
-		#ifdef DEBUG
-		("debug", "Output debug information")
-		#endif
-	;
+	// Filters
+	parser.add("exclude-temp", 'm');
+	parser.add("language", 0, true);
+	parser.add("language-only");
+	parser.add("include", 'I', true, false, true);
 	
-	po::options_description hidden("Hidden options");
-	hidden.add_options()
-		("setup-files", po::value< std::vector<std::string> >(), "Setup files to be extracted")
-		/**/;
-	
-	po::options_description options_desc;
-	options_desc.add(generic).add(action).add(modifiers).add(filter).add(io).add(hidden);
-	
-	po::options_description visible;
-	visible.add(generic).add(action).add(modifiers).add(filter).add(io);
-	
-	po::positional_options_description p;
-	p.add("setup-files", -1);
-	
-	po::variables_map options;
+	// Display options
+	parser.add("quiet", 'q');
+	parser.add("silent", 's');
+	parser.add("no-warn-unused");
+	parser.add("color", 'c', true, true);
+	parser.add("progress", 'p', true, true);
+#ifdef DEBUG
+	parser.add("debug");
+#endif
 	
 	// Parse the command-line.
 	try {
-		po::store(po::command_line_parser(argc, argv).options(options_desc).positional(p).run(),
-		          options);
-		po::notify(options);
+		parser.parse(argc, argv);
 	} catch(std::exception & e) {
 		color::init(color::disable, color::disable); // Be conservative
 		std::cerr << "Error parsing command-line: " << e.what() << "\n\n";
-		print_help(get_command(argv[0]), visible);
+		print_help(get_command(argv[0]));
 		return ExitUserError;
 	}
 	
 	::extract_options o;
 	
 	// Verbosity settings.
-	o.silent = (options.count("silent") != 0);
-	o.quiet = o.silent || options.count("quiet");
+	o.silent = parser.count("silent");
+	o.quiet = o.silent || parser.count("quiet");
 	logger::quiet = o.quiet;
 #ifdef DEBUG
-	if(options.count("debug")) {
+	if(parser.count("debug")) {
 		logger::debug = true;
 	}
 #endif
 	
-	o.warn_unused = (options.count("no-warn-unused") == 0);
+	o.warn_unused = !parser.count("no-warn-unused");
 	
 	// Color / progress bar settings.
 	color::is_enabled color_e;
-	po::variables_map::const_iterator color_i = options.find("color");
-	if(color_i == options.end()) {
+	if(!parser.has("color")) {
 		color_e = o.silent ? color::disable : color::automatic;
 	} else {
-		color_e = color_i->second.as<bool>() ? color::enable : color::disable;
+		color_e = iequals(parser.value("color"), "true") ? color::enable : color::disable;
 	}
 	color::is_enabled progress_e;
-	po::variables_map::const_iterator progress_i = options.find("progress");
-	if(progress_i == options.end()) {
+	if(!parser.has("progress")) {
 		progress_e = o.silent ? color::disable : color::automatic;
 	} else {
-		progress_e = progress_i->second.as<bool>() ? color::enable : color::disable;
+		progress_e = iequals(parser.value("progress"), "true") ? color::enable : color::disable;
 	}
 	color::init(color_e, progress_e);
 	
 	// Help output.
-	if(options.count("help") != 0) {
-		print_help(get_command(argv[0]), visible);
+	if(parser.count("help")) {
+		print_help(get_command(argv[0]));
 		return ExitSuccess;
 	}
 	
 	// License output
-	if(options.count("license") != 0) {
+	if(parser.count("license")) {
 		print_license();
 		return ExitSuccess;
 	}
 	
 	// Main action.
-	o.list_sizes = (options.count("list-sizes") != 0);
-	o.list_checksums = (options.count("list-checksums") != 0);
-	bool explicit_list = (options.count("list") != 0);
+	o.list_sizes = parser.count("list-sizes");
+	o.list_checksums = parser.count("list-checksums");
+	bool explicit_list = parser.count("list");
 	o.list = explicit_list || o.list_sizes || o.list_checksums;
-	o.extract = (options.count("extract") != 0);
-	o.test = (options.count("test") != 0);
-	o.list_languages = (options.count("list-languages") != 0);
-	o.gog_game_id = (options.count("gog-game-id") != 0);
-	o.show_password = (options.count("show-password") != 0);
-	o.check_password = (options.count("check-password") != 0);
-	if(options.count("info") != 0) {
+	o.extract = parser.count("extract");
+	o.test = parser.count("test");
+	o.list_languages = parser.count("list-languages");
+	o.gog_game_id = parser.count("gog-game-id");
+	o.show_password = parser.count("show-password");
+	o.check_password = parser.count("check-password");
+	if(parser.count("info")) {
 		o.list_languages = true;
 		o.gog_game_id = true;
 		o.show_password = true;
@@ -285,20 +553,19 @@ int main(int argc, char * argv[]) {
 	}
 	
 	// Additional actions.
-	o.filenames.set_expand(options.count("dump") == 0);
-	o.filenames.set_lowercase(options.count("lowercase") != 0);
+	o.filenames.set_expand(!parser.count("dump"));
+	o.filenames.set_lowercase(parser.count("lowercase"));
 	
 	// File timestamps
 	{
 		o.preserve_file_times = true, o.local_timestamps = false;
-		po::variables_map::const_iterator i = options.find("timestamps");
-		if(i != options.end()) {
-			std::string timezone_name = i->second.as<std::string>();
-			if(boost::iequals(timezone_name, "none")) {
+		if(parser.has("timestamps")) {
+			const std::string & timezone_name = parser.value("timestamps");
+			if(iequals(timezone_name, "none")) {
 				o.preserve_file_times = false;
-			} else if(!boost::iequals(timezone_name, "UTC")) {
+			} else if(!iequals(timezone_name, "UTC")) {
 				o.local_timestamps = true;
-				if(!boost::iequals(timezone_name, "local")) {
+				if(!iequals(timezone_name, "local")) {
 					util::set_local_timezone(timezone_name);
 				}
 			}
@@ -306,22 +573,19 @@ int main(int argc, char * argv[]) {
 	}
 	
 	// List version.
-	if(options.count("version") != 0) {
+	if(parser.count("version")) {
 		print_version(o);
 		if(!explicit_action) {
 			return ExitSuccess;
 		}
 	}
 	
-	{
-		po::variables_map::const_iterator i = options.find("codepage");
-		o.codepage = (i != options.end()) ? i->second.as<boost::uint32_t>() : 0;
-	}
+	o.codepage = parser.has("codepage") ? parse_uint32(parser.value("codepage")) : 0;
+	
 	{
 		o.collisions = OverwriteCollisions;
-		po::variables_map::const_iterator i = options.find("collisions");
-		if(i != options.end()) {
-			std::string collisions = i->second.as<std::string>();
+		if(parser.has("collisions")) {
+			const std::string & collisions = parser.value("collisions");
 			if(collisions == "overwrite")  {
 				o.collisions = OverwriteCollisions;
 			} else if(collisions == "rename") {
@@ -336,29 +600,20 @@ int main(int argc, char * argv[]) {
 			}
 		}
 	}
-	{
-		po::variables_map::const_iterator i = options.find("default-language");
-		if(i != options.end()) {
-			o.default_language = i->second.as<std::string>();
-		}
+	if(parser.has("default-language")) {
+		o.default_language = parser.value("default-language");
 	}
 	
-	o.extract_temp = (options.count("exclude-temp") == 0);
-	{
-		po::variables_map::const_iterator i = options.find("language");
-		if(i != options.end()) {
-			o.language = i->second.as<std::string>();
-		}
-		o.language_only = (options.count("language-only") != 0);
+	o.extract_temp = !parser.count("exclude-temp");
+	if(parser.has("language")) {
+		o.language = parser.value("language");
 	}
-	{
-		po::variables_map::const_iterator i = options.find("include");
-		if(i != options.end()) {
-			o.include = i->second.as<std::vector <std::string> >();
-		}
+	o.language_only = parser.count("language-only");
+	if(parser.has("include")) {
+		o.include = parser.values_of("include");
 	}
 	
-	if(options.count("setup-files") == 0) {
+	if(parser.positional().empty()) {
 		if(!o.silent) {
 			std::cout << get_command(argv[0]) << ": no input files specified\n";
 			std::cout << "Try the --help (-h) option for usage information.\n";
@@ -366,38 +621,33 @@ int main(int argc, char * argv[]) {
 		return ExitSuccess;
 	}
 	
-	{
-		po::variables_map::const_iterator i = options.find("output-dir");
-		if(i != options.end()) {
-			/*
-			 * We can't use fs::path directly with boost::program_options as fs::path's
-			 * operator>> expects paths to be quoted if they contain spaces, breaking
-			 * lexical casts.
-			 * Instead, do the conversion in the assignment operator.
-			 * See https://svn.boost.org/trac/boost/ticket/8535
-			 */
-			o.output_dir = i->second.as<std::string>();
-		}
+	if(parser.has("output-dir")) {
+		/*
+		 * On Windows, util::u8path() must be used to interpret the given string as
+		 * UTF-8, as std::filesystem::path's implicit conversion from std::string
+		 * would otherwise use the current codepage.
+		 */
+		o.output_dir = util::u8path(parser.value("output-dir"));
 	}
 	
 	{
-		po::variables_map::const_iterator password = options.find("password");
-		po::variables_map::const_iterator password_file = options.find("password-file");
-		if(password != options.end() && password_file != options.end()) {
+		bool have_password = parser.has("password");
+		bool have_password_file = parser.has("password-file");
+		if(have_password && have_password_file) {
 			log_error << "Combining --password and --password-file is not allowed";
 			return ExitUserError;
 		}
-		if(password != options.end()) {
-			o.password = password->second.as<std::string>();
+		if(have_password) {
+			o.password = parser.value("password");
 		}
-		if(password_file != options.end()) {
+		if(have_password_file) {
 			std::istream * is = &std::cin;
-			fs::path file = password_file->second.as<std::string>();
+			fs::path file = util::u8path(parser.value("password-file"));
 			util::ifstream ifs;
-			if(file != "-") {
+			if(util::as_string(file) != "-") {
 				ifs.open(file);
 				if(!ifs.is_open()) {
-					log_error << "Could not open password file " << file;
+					log_error << "Could not open password file " << util::as_string(file);
 					return ExitDataError;
 				}
 				is = &ifs;
@@ -410,7 +660,7 @@ int main(int argc, char * argv[]) {
 				o.password.resize(o.password.size() - 1);
 			}
 			if(!*is) {
-				log_error << "Could not read password file " << file;
+				log_error << "Could not read password file " << util::as_string(file);
 				return ExitDataError;
 			}
 		}
@@ -420,10 +670,10 @@ int main(int argc, char * argv[]) {
 		}
 	}
 	
-	o.gog = (options.count("gog") != 0);
-	o.gog_galaxy = (options.count("no-gog-galaxy") == 0);
+	o.gog = parser.count("gog");
+	o.gog_galaxy = !parser.count("no-gog-galaxy");
 	
-	o.data_version = (options.count("data-version") != 0);
+	o.data_version = parser.count("data-version");
 	if(o.data_version) {
 		logger::quiet = true;
 		if(explicit_action) {
@@ -432,25 +682,24 @@ int main(int argc, char * argv[]) {
 		}
 	}
 	
-	#ifdef DEBUG
-	o.dump_headers = (options.count("dump-headers") != 0);
+#ifdef DEBUG
+	o.dump_headers = parser.count("dump-headers");
 	if(o.dump_headers) {
 		if(explicit_action || o.data_version) {
 			log_error << "Combining --dump-headers with other options is not allowed";
 			return ExitUserError;
 		}
 	}
-	#endif
+#endif
 	
-	o.extract_unknown = (options.count("no-extract-unknown") == 0);
+	o.extract_unknown = !parser.count("no-extract-unknown");
 	
-	const std::vector<std::string> & files = options["setup-files"]
-	                                         .as< std::vector<std::string> >();
+	const std::vector<std::string> & files = parser.positional();
 	
 	bool suggest_bug_report = false;
 	try {
-		BOOST_FOREACH(const std::string & file, files) {
-			process_file(file, o);
+		for(const std::string & file : files) {
+			process_file(util::u8path(file), o);
 			if(!o.data_version && files.size() > 1) {
 				std::cout << '\n';
 			}

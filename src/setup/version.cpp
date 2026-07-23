@@ -19,19 +19,12 @@
  */
 
 #include "setup/version.hpp"
+#include <iterator>
 
 #include <cstring>
 #include <algorithm>
 #include <istream>
 #include <ostream>
-
-#include <boost/version.hpp>
-#include <boost/static_assert.hpp>
-#include <boost/lexical_cast.hpp>
-#include "boost/algorithm/string.hpp"
-#include <boost/range/begin.hpp>
-#include <boost/range/end.hpp>
-#include <boost/range/size.hpp>
 
 #include "util/load.hpp"
 #include "util/log.hpp"
@@ -216,14 +209,14 @@ void version::load(std::istream & is) {
 	
 	static const char digits[] = "0123456789";
 	
-	BOOST_STATIC_ASSERT(sizeof(stored_legacy_version) <= sizeof(stored_version));
+	static_assert(sizeof(stored_legacy_version) <= sizeof(stored_version), "static assertion failed");
 	
 	stored_legacy_version legacy_version;
 	is.read(legacy_version, std::streamsize(sizeof(legacy_version)));
 	
 	if(legacy_version[0] == 'i' && legacy_version[sizeof(legacy_version) - 1] == '\x1a') {
 		
-		for(size_t i = 0; i < size_t(boost::size(legacy_versions)); i++) {
+		for(size_t i = 0; i < size_t(std::size(legacy_versions)); i++) {
 			if(!memcmp(legacy_version, legacy_versions[i].name, sizeof(legacy_version))) {
 				value = legacy_versions[i].version;
 				variant = legacy_versions[i].variant;
@@ -256,7 +249,7 @@ void version::load(std::istream & is) {
 			unsigned b = util::to_unsigned(version_str.data() + 3, 1);
 			unsigned c = util::to_unsigned(version_str.data() + 5, 2);
 			value = INNO_VERSION(a, b, c);
-		} catch(const boost::bad_lexical_cast &) {
+		} catch(const util::bad_number_cast &) {
 			throw version_error();
 		}
 		
@@ -266,13 +259,13 @@ void version::load(std::istream & is) {
 	}
 	
 	stored_version version_string;
-	BOOST_STATIC_ASSERT(sizeof(legacy_version) <= sizeof(version_string));
+	static_assert(sizeof(legacy_version) <= sizeof(version_string), "static assertion failed");
 	memcpy(version_string, legacy_version, sizeof(legacy_version));
 	is.read(version_string + sizeof(legacy_version),
 	        std::streamsize(sizeof(version_string) - sizeof(legacy_version)));
 	
 	
-	for(size_t i = 0; i < size_t(boost::size(versions)); i++) {
+	for(size_t i = 0; i < size_t(std::size(versions)); i++) {
 		if(versions[i].name[0] != '\0' && !memcmp(version_string, versions[i].name, sizeof(version_string))) {
 			value = versions[i].version;
 			variant = versions[i].variant;
@@ -282,10 +275,10 @@ void version::load(std::istream & is) {
 		}
 	}
 	
-	char * end = std::find(version_string, version_string + boost::size(version_string), '\0');
+	char * end = std::find(version_string, version_string + std::size(version_string), '\0');
 	std::string version_str(version_string, end);
 	debug("unknown version: \"" << version_str << '"');
-	if(!boost::contains(version_str, "Inno Setup")) {
+	if(version_str.find("Inno Setup") == std::string::npos) {
 		throw version_error();
 	}
 	
@@ -339,7 +332,7 @@ void version::load(std::istream & is) {
 			
 			value = std::max(value, INNO_VERSION_EXT(a, b, c, d));
 			
-		} catch(const boost::bad_lexical_cast &) {
+		} catch(const util::bad_number_cast &) {
 			continue;
 		}
 	}
@@ -349,10 +342,11 @@ void version::load(std::istream & is) {
 	
 	variant = 0;
 	if(value >= INNO_VERSION(6, 3, 0) ||
-	   boost::contains(version_str, "(u)") || boost::contains(version_str, "(U)")) {
+	   version_str.find("(u)") != std::string::npos || version_str.find("(U)") != std::string::npos) {
 		variant |= Unicode;
 	}
-	if(boost::contains(version_str, "My Inno Setup Extensions") || boost::contains(version_str, "with ISX")) {
+	if(version_str.find("My Inno Setup Extensions") != std::string::npos
+	   || version_str.find("with ISX") != std::string::npos) {
 		variant |= ISX;
 	}
 	
@@ -406,9 +400,9 @@ bool version::is_ambiguous() const {
 
 version_constant version::next() {
 	
-	const known_legacy_version * legacy_end = boost::end(legacy_versions);
+	const known_legacy_version * legacy_end = std::end(legacy_versions);
 	const known_legacy_version * legacy_result;
-	legacy_result = std::upper_bound(boost::begin(legacy_versions), legacy_end, value);
+	legacy_result = std::upper_bound(std::begin(legacy_versions), legacy_end, value);
 	while(legacy_result != legacy_end && legacy_result->variant != variant) {
 		legacy_result++;
 	}
@@ -416,8 +410,8 @@ version_constant version::next() {
 		return legacy_result->version;
 	}
 	 
-	const known_version * end = boost::end(versions);
-	const known_version * result = std::upper_bound(boost::begin(versions), end, value);
+	const known_version * end = std::end(versions);
+	const known_version * result = std::upper_bound(std::begin(versions), end, value);
 	while(result != end && result->variant != variant) {
 		result++;
 	}

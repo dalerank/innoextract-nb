@@ -29,7 +29,7 @@
 #include <string>
 #include <iosfwd>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "setup/item.hpp"
 #include "util/enum.hpp"
@@ -74,7 +74,7 @@ struct icon_entry : public item {
 	
 	close_setting close_on_exit;
 	
-	boost::uint16_t hotkey;
+	std::uint16_t hotkey;
 	
 	flags options;
 	

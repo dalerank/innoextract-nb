@@ -19,30 +19,18 @@
  */
 
 #include "cli/extract.hpp"
+#include <iterator>
 
 #include <algorithm>
-#include <cmath>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 #include <limits>
-
-#include <boost/foreach.hpp>
-#include <boost/noncopyable.hpp>
-#include <boost/scoped_ptr.hpp>
-#include <boost/unordered_map.hpp>
-#include <boost/algorithm/string/case_conv.hpp>
-#include <boost/filesystem/operations.hpp>
-#include <boost/ptr_container/ptr_map.hpp>
-#include <boost/ptr_container/ptr_vector.hpp>
-#include <boost/range/size.hpp>
-
-#include <boost/version.hpp>
-#if BOOST_VERSION >= 104800
-#include <boost/container/flat_map.hpp>
-#endif
 
 #include "cli/debug.hpp"
 #include "cli/gog.hpp"
@@ -73,9 +61,21 @@
 #include "util/output.hpp"
 #include "util/time.hpp"
 
-namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
 
 namespace {
+
+//! Locale-independent ASCII lower-case conversion, equivalent to boost::to_lower_copy()
+//! for the paths handled here (which only ever need ASCII case folding).
+std::string to_lower_copy(const std::string & s) {
+	std::string result = s;
+	for(char & c : result) {
+		if(c >= 'A' && c <= 'Z') {
+			c = char(c - 'A' + 'a');
+		}
+	}
+	return result;
+}
 
 template <typename Entry>
 class processed_item {
@@ -123,27 +123,30 @@ public:
 	
 };
 
-class file_output : private boost::noncopyable {
+class file_output {
 	
 	fs::path path_;
 	const processed_file * file_;
 	util::fstream stream_;
 	
 	crypto::hasher checksum_;
-	boost::uint64_t checksum_position_;
+	std::uint64_t checksum_position_;
 	
-	boost::uint64_t position_;
-	boost::uint64_t total_written_;
+	std::uint64_t position_;
+	std::uint64_t total_written_;
 	
 	bool write_;
 	
 public:
 	
+	file_output(const file_output &) = delete;
+	file_output & operator=(const file_output &) = delete;
+	
 	explicit file_output(const fs::path & dir, const processed_file * f, bool write)
-		: path_(dir / f->path())
+		: path_(dir / util::u8path(f->path()))
 		, file_(f)
 		, checksum_(f->entry().checksum.type)
-		, checksum_position_(f->entry().checksum.type == crypto::None ? boost::uint64_t(-1) : 0)
+		, checksum_position_(f->entry().checksum.type == crypto::None ? std::uint64_t(-1) : 0)
 		, position_(0)
 		, total_written_(0)
 		, write_(write)
@@ -159,7 +162,7 @@ public:
 					throw std::exception();
 				}
 			} catch(...) {
-				throw std::runtime_error("Could not open output file \"" + path_.string() + '"');
+				throw std::runtime_error("Could not open output file \"" + util::as_string(path_) + '"');
 			}
 		}
 	}
@@ -181,7 +184,7 @@ public:
 		return !write_ || !stream_.fail();
 	}
 	
-	void seek(boost::uint64_t new_position) {
+	void seek(std::uint64_t new_position) {
 		
 		if(new_position == position_) {
 			return;
@@ -194,13 +197,13 @@ public:
 			return;
 		}
 		
-		const boost::uint64_t max = boost::uint64_t(std::numeric_limits<util::fstream::off_type>::max() / 4);
+		const std::uint64_t max = std::uint64_t(std::numeric_limits<util::fstream::off_type>::max() / 4);
 		
 		if(new_position <= max) {
 			stream_.seekp(util::fstream::off_type(new_position), std::ios_base::beg);
 		} else {
 			util::fstream::off_type sign = (new_position > position_) ? 1 : -1;
-			boost::uint64_t diff = (new_position > position_) ? new_position - position_ : position_ - new_position;
+			std::uint64_t diff = (new_position > position_) ? new_position - position_ : position_ - new_position;
 			while(diff > 0) {
 				stream_.seekp(sign * util::fstream::off_type(std::min(diff, max)), std::ios_base::cur);
 				diff -= std::min(diff, max);
@@ -242,9 +245,9 @@ public:
 		
 		debug("calculating output checksum for " << path_);
 		
-		const boost::uint64_t max = boost::uint64_t(std::numeric_limits<util::fstream::off_type>::max() / 4);
+		const std::uint64_t max = std::uint64_t(std::numeric_limits<util::fstream::off_type>::max() / 4);
 		
-		boost::uint64_t diff = checksum_position_;
+		std::uint64_t diff = checksum_position_;
 		stream_.seekg(util::fstream::off_type(std::min(diff, max)), std::ios_base::beg);
 		diff -= std::min(diff, max);
 		while(diff > 0) {
@@ -256,7 +259,7 @@ public:
 			char buffer[8192];
 			std::streamsize n = stream_.read(buffer, sizeof(buffer)).gcount();
 			checksum_.update(buffer, size_t(n));
-			checksum_position_ += boost::uint64_t(n);
+			checksum_position_ += std::uint64_t(n);
 		}
 		
 		if(!has_checksum()) {
@@ -281,13 +284,13 @@ class path_filter {
 public:
 	
 	explicit path_filter(const extract_options & o) {
-		BOOST_FOREACH(const std::string & include, o.include) {
-			if(!include.empty() && include[0] == setup::path_sep) {
-				includes.push_back(Filter(true, boost::to_lower_copy(include) + setup::path_sep));
-			} else {
-				includes.push_back(Filter(false, setup::path_sep + boost::to_lower_copy(include)
-				                                 + setup::path_sep));
-			}
+		for(const std::string & include : o.include) {
+		if(!include.empty() && include[0] == setup::path_sep) {
+			includes.push_back(Filter(true, to_lower_copy(include) + setup::path_sep));
+		} else {
+			includes.push_back(Filter(false, setup::path_sep + to_lower_copy(include)
+			                                 + setup::path_sep));
+		}
 		}
 	}
 	
@@ -297,7 +300,7 @@ public:
 			return true;
 		}
 		
-		BOOST_FOREACH(const Filter & i, includes) {
+		for(const Filter & i : includes) {
 			if(i.first) {
 				if(!i.second.compare(1, i.second.size() - 1,
 				                     path + setup::path_sep, 0, i.second.size() - 1)) {
@@ -348,7 +351,7 @@ void print_filter_info(const setup::directory_entry & dir) {
 	print_filter_info(dir, is_temp);
 }
 
-void print_size_info(const stream::file & file, boost::uint64_t size) {
+void print_size_info(const stream::file & file, std::uint64_t size) {
 	
 	if(logger::debug) {
 		std::cout << " @ " << print_hex(file.offset);
@@ -367,7 +370,7 @@ void print_checksum_info(const stream::file & file, const crypto::checksum * che
 }
 
 void print_file_details(const extract_options & o, const stream::file & file, const stream::chunk & chunk,
-                        boost::uint64_t size, const crypto::checksum * checksum, const std::string & key) {
+                        std::uint64_t size, const crypto::checksum * checksum, const std::string & key) {
 	
 	if(o.list_sizes) {
 		print_size_info(file, size);
@@ -446,7 +449,7 @@ const char * handle_collision(const setup::file_entry & oldfile, const setup::da
 		return "user chose not to overwrite";
 	}
 	
-	if(oldfile.attributes != boost::uint32_t(-1)
+	if(oldfile.attributes != std::uint32_t(-1)
 	   && (oldfile.attributes & setup::file_entry::ReadOnly) != 0) {
 		if(!(newfile.options & setup::file_entry::OverwriteReadOnly) && !prompt_overwrite()) {
 			return "user chose not to overwrite read-only file";
@@ -456,13 +459,9 @@ const char * handle_collision(const setup::file_entry & oldfile, const setup::da
 	return NULL; // overwrite old file
 }
 
-typedef boost::unordered_map<std::string, processed_file> FilesMap;
-#if BOOST_VERSION >= 104800
-typedef boost::container::flat_map<std::string, processed_directory> DirectoriesMap;
-#else
+typedef std::unordered_map<std::string, processed_file> FilesMap;
 typedef std::map<std::string, processed_directory> DirectoriesMap;
-#endif
-typedef boost::unordered_map<std::string, std::vector<processed_file> > CollisionMap;
+typedef std::unordered_map<std::string, std::vector<processed_file> > CollisionMap;
 
 std::string parent_dir(const std::string & path) {
 	
@@ -588,7 +587,7 @@ bool rename_collision(const extract_options & o, FilesMap & processed_files, con
 void rename_collisions(const extract_options & o, FilesMap & processed_files,
                        const CollisionMap & collisions) {
 	
-	BOOST_FOREACH(const CollisionMap::value_type & collision, collisions) {
+	for(const CollisionMap::value_type & collision : collisions) {
 		
 		const std::string & path = collision.first;
 		
@@ -599,7 +598,7 @@ void rename_collisions(const extract_options & o, FilesMap & processed_files,
 		bool common_component = true;
 		bool common_language = true;
 		bool common_arch = true;
-		BOOST_FOREACH(const processed_file & other, collision.second) {
+		for(const processed_file & other : collision.second) {
 			common_component = common_component && other.entry().components == file.components;
 			common_language = common_language && other.entry().languages == file.languages;
 			common_arch = common_arch && (other.entry().options & arch_flags) == (file.options & arch_flags);
@@ -611,7 +610,7 @@ void rename_collisions(const extract_options & o, FilesMap & processed_files,
 			processed_files.erase(path);
 		}
 		
-		BOOST_FOREACH(const processed_file & other, collision.second) {
+		for(const processed_file & other : collision.second) {
 			rename_collision(o, processed_files, path, other,
 			                 common_component, common_language, common_arch, false);
 		}
@@ -652,14 +651,14 @@ bool print_file_info(const extract_options & o, const setup::info & info) {
 	
 	if(o.list_languages) {
 		if(o.silent) {
-			BOOST_FOREACH(const setup::language_entry & language, info.languages) {
+			for(const setup::language_entry & language : info.languages) {
 				std::cout << language.name <<' ' << language.language_name << '\n';
 			}
 		} else {
 			if(multiple_sections) {
 				std::cout << "Languages:\n";
 			}
-			BOOST_FOREACH(const setup::language_entry & language, info.languages) {
+			for(const setup::language_entry & language : info.languages) {
 				std::cout << " - " << color::green << language.name << color::reset;
 				if(!language.language_name.empty()) {
 					std::cout << ": " << color::white << language.language_name << color::reset;
@@ -741,21 +740,14 @@ processed_entries filter_entries(const extract_options & o, const setup::info & 
 	
 	processed_entries processed;
 	
-	#if BOOST_VERSION >= 105000
 	processed.files.reserve(info.files.size());
-	#endif
-	
-	#if BOOST_VERSION >= 104800
-	processed.directories.reserve(info.directories.size()
-	                              + size_t(std::log(double(info.files.size()))));
-	#endif
 	
 	CollisionMap collisions;
 	
 	path_filter includes(o);
 	
 	// Filter the directories to be created
-	BOOST_FOREACH(const setup::directory_entry & directory, info.directories) {
+	for(const setup::directory_entry & directory : info.directories) {
 		
 		if(!o.extract_temp && (directory.options & setup::directory_entry::DeleteAfterInstall)) {
 			continue; // Ignore temporary dirs
@@ -773,7 +765,7 @@ processed_entries filter_entries(const extract_options & o, const setup::info & 
 		if(path.empty()) {
 			continue; // Don't know what to do with this
 		}
-		std::string internal_path = boost::algorithm::to_lower_copy(path);
+		std::string internal_path = to_lower_copy(path);
 		
 		bool path_included = includes.match(internal_path);
 		
@@ -796,7 +788,7 @@ processed_entries filter_entries(const extract_options & o, const setup::info & 
 	}
 	
 	// Filter the files to be extracted
-	BOOST_FOREACH(const setup::file_entry & file, info.files) {
+	for(const setup::file_entry & file : info.files) {
 		
 		if(file.location >= info.data_entries.size()) {
 			continue; // Ignore external files (copy commands)
@@ -818,7 +810,7 @@ processed_entries filter_entries(const extract_options & o, const setup::info & 
 		if(path.empty()) {
 			continue; // Internal file, not extracted
 		}
-		std::string internal_path = boost::algorithm::to_lower_copy(path);
+		std::string internal_path = to_lower_copy(path);
 		
 		bool path_included = includes.match(internal_path);
 		
@@ -904,7 +896,7 @@ void create_output_directory(const extract_options & o) {
 			fs::create_directory(o.output_dir);
 		}
 	} catch(...) {
-		throw std::runtime_error("Could not create output directory \"" + o.output_dir.string() + '"');
+		throw std::runtime_error("Could not create output directory \"" + util::as_string(o.output_dir) + '"');
 	}
 	
 }
@@ -917,11 +909,11 @@ void process_file(const fs::path & installer, const extract_options & o) {
 	try {
 		is_directory = fs::is_directory(installer);
 	} catch(...) {
-		throw std::runtime_error("Could not open file \"" + installer.string()
+		throw std::runtime_error("Could not open file \"" + util::as_string(installer)
 		                         + "\": access denied");
 	}
 	if(is_directory) {
-		throw std::runtime_error("Input file \"" + installer.string() + "\" is a directory!");
+		throw std::runtime_error("Input file \"" + util::as_string(installer) + "\" is a directory!");
 	}
 	
 	util::ifstream ifs;
@@ -931,7 +923,7 @@ void process_file(const fs::path & installer, const extract_options & o) {
 			throw std::exception();
 		}
 	} catch(...) {
-		throw std::runtime_error("Could not open file \"" + installer.string() + '"');
+		throw std::runtime_error("Could not open file \"" + util::as_string(installer) + '"');
 	}
 	
 	loader::offsets offsets;
@@ -993,7 +985,7 @@ void process_file(const fs::path & installer, const extract_options & o) {
 		fs::path headerfile = installer;
 		headerfile.replace_extension(".0");
 		if(offsets.header_offset == 0 && headerfile != installer && fs::exists(headerfile)) {
-			log_info << "Opening \"" << color::cyan << headerfile.string() << color::reset << '"';
+			log_info << "Opening \"" << color::cyan << util::as_string(headerfile) << color::reset << '"';
 			process_file(headerfile, o);
 			return;
 		}
@@ -1057,7 +1049,7 @@ void process_file(const fs::path & installer, const extract_options & o) {
 	
 	if(o.list || o.extract) {
 		
-		BOOST_FOREACH(const DirectoriesMap::value_type & i, processed.directories) {
+		for(const DirectoriesMap::value_type & i : processed.directories) {
 			
 			const std::string & path = i.second.path();
 			
@@ -1079,11 +1071,11 @@ void process_file(const fs::path & installer, const extract_options & o) {
 			}
 			
 			if(o.extract) {
-				fs::path dir = o.output_dir / path;
+				fs::path dir = o.output_dir / util::u8path(path);
 				try {
 					fs::create_directory(dir);
 				} catch(...) {
-					throw std::runtime_error("Could not create directory \"" + dir.string() + '"');
+					throw std::runtime_error("Could not create directory \"" + util::as_string(dir) + '"');
 				}
 			}
 			
@@ -1091,17 +1083,17 @@ void process_file(const fs::path & installer, const extract_options & o) {
 		
 	}
 	
-	typedef std::pair<const processed_file *, boost::uint64_t> output_location;
+	typedef std::pair<const processed_file *, std::uint64_t> output_location;
 	std::vector< std::vector<output_location> > files_for_location;
 	files_for_location.resize(info.data_entries.size());
-	BOOST_FOREACH(const FilesMap::value_type & i, processed.files) {
+	for(const FilesMap::value_type & i : processed.files) {
 		const processed_file & file = i.second;
 		files_for_location[file.entry().location].push_back(output_location(&file, 0));
 		if(o.test || o.extract) {
-			boost::uint64_t offset = info.data_entries[file.entry().location].uncompressed_size;
-			boost::uint32_t sort_slice = info.data_entries[file.entry().location].chunk.first_slice;
-			boost::uint32_t sort_offset = info.data_entries[file.entry().location].chunk.sort_offset;
-			BOOST_FOREACH(boost::uint32_t location, file.entry().additional_locations) {
+			std::uint64_t offset = info.data_entries[file.entry().location].uncompressed_size;
+			std::uint32_t sort_slice = info.data_entries[file.entry().location].chunk.first_slice;
+			std::uint32_t sort_offset = info.data_entries[file.entry().location].chunk.sort_offset;
+			for(std::uint32_t location : file.entry().additional_locations) {
 				setup::data_entry & data = info.data_entries[location];
 				files_for_location[location].push_back(output_location(&file, offset));
 				offset += data.uncompressed_size;
@@ -1113,13 +1105,13 @@ void process_file(const fs::path & installer, const extract_options & o) {
 					data.chunk.sort_offset = ++sort_offset;
 				} else {
 					// Could not reorder chunk - no point in trying to reordder the remaining chunks
-					sort_slice = boost::uint32_t(-1);
+					sort_slice = std::uint32_t(-1);
 				}
 			}
 		}
 	}
 	
-	boost::uint64_t total_size = 0;
+	std::uint64_t total_size = 0;
 	
 	typedef std::map<stream::file, size_t> Files;
 	typedef std::map<stream::chunk, Files> Chunks;
@@ -1132,7 +1124,7 @@ void process_file(const fs::path & installer, const extract_options & o) {
 		}
 	}
 	
-	boost::scoped_ptr<stream::slice_reader> slice_reader;
+	std::unique_ptr<stream::slice_reader> slice_reader;
 	if(o.extract || o.test) {
 		if(offsets.data_offset) {
 			slice_reader.reset(new stream::slice_reader(&ifs, offsets.data_offset));
@@ -1153,10 +1145,10 @@ void process_file(const fs::path & installer, const extract_options & o) {
 	
 	progress extract_progress(total_size);
 	
-	typedef boost::ptr_map<const processed_file *, file_output> multi_part_outputs;
+	typedef std::map<const processed_file *, std::unique_ptr<file_output> > multi_part_outputs;
 	multi_part_outputs multi_outputs;
 	
-	BOOST_FOREACH(const Chunks::value_type & chunk, chunks) {
+	for(const Chunks::value_type & chunk : chunks) {
 		
 		debug("[starting " << chunk.first.compression << " chunk @ slice " << chunk.first.first_slice
 		      << " + " << print_hex(offsets.data_offset) << " + " << print_hex(chunk.first.offset)
@@ -1166,9 +1158,9 @@ void process_file(const fs::path & installer, const extract_options & o) {
 		if((o.extract || o.test) && (chunk.first.encryption == stream::Plaintext || !key.empty())) {
 			chunk_source = stream::chunk_reader::get(*slice_reader, chunk.first, key);
 		}
-		boost::uint64_t offset = 0;
+		std::uint64_t offset = 0;
 		
-		BOOST_FOREACH(const Files::value_type & location, chunk.second) {
+		for(const Files::value_type & location : chunk.second) {
 			const stream::file & file = location.first;
 			const std::vector<output_location> & output_locations = files_for_location[location.second];
 			
@@ -1188,9 +1180,9 @@ void process_file(const fs::path & installer, const extract_options & o) {
 				if(!o.silent) {
 					
 					bool named = false;
-					boost::uint64_t size = 0;
+					std::uint64_t size = 0;
 					const crypto::checksum * checksum = NULL;
-					BOOST_FOREACH(const output_location & output, output_locations) {
+					for(const output_location & output : output_locations) {
 						if(output.second != 0) {
 							continue;
 						}
@@ -1237,11 +1229,11 @@ void process_file(const fs::path & installer, const extract_options & o) {
 					}
 					
 				} else {
-					BOOST_FOREACH(const output_location & output, output_locations) {
+					for(const output_location & output : output_locations) {
 						if(output.second == 0) {
 							const processed_file * fileinfo = output.first;
 							if(o.list_sizes) {
-								boost::uint64_t size = fileinfo->entry().size;
+								std::uint64_t size = fileinfo->entry().size;
 								std::cout << color::dim_cyan << (size != 0 ? size : file.size) << color::reset << ' ';
 							}
 							if(o.list_checksums) {
@@ -1280,60 +1272,56 @@ void process_file(const fs::path & installer, const extract_options & o) {
 			file_source = stream::file_reader::get(*chunk_source, file, &checksum);
 			
 			// Open output files
-			boost::ptr_vector<file_output> single_outputs;
-			typedef std::pair<file_output *, boost::uint64_t> file_output_location;
+			std::vector<std::unique_ptr<file_output> > single_outputs;
+			typedef std::pair<file_output *, std::uint64_t> file_output_location;
 			std::vector<file_output_location> outputs;
-			BOOST_FOREACH(const output_location & output_loc, output_locations) {
+			for(const output_location & output_loc : output_locations) {
 				const processed_file * fileinfo = output_loc.first;
-				try {
-					
-					if(!o.extract && fileinfo->entry().checksum.type == crypto::None) {
-						continue;
-					}
-					
-					// Re-use existing file output for multi-part files
-					file_output * output = NULL;
-					if(fileinfo->is_multipart()) {
-						multi_part_outputs::iterator it = multi_outputs.find(fileinfo);
-						if(it != multi_outputs.end()) {
-							output = it->second;
-						}
-					}
-					
-					if(!output) {
-						output = new file_output(o.output_dir, fileinfo, o.extract);
-						if(fileinfo->is_multipart()) {
-							multi_outputs.insert(fileinfo, output);
-						} else {
-							single_outputs.push_back(output);
-						}
-					}
-					
-					outputs.push_back(file_output_location(output, output_loc.second));
-					
-				} catch(boost::bad_pointer &) {
-					// should never happen
-					std::terminate();
+				
+				if(!o.extract && fileinfo->entry().checksum.type == crypto::None) {
+					continue;
 				}
+				
+				// Re-use existing file output for multi-part files
+				file_output * output = NULL;
+				if(fileinfo->is_multipart()) {
+					multi_part_outputs::iterator it = multi_outputs.find(fileinfo);
+					if(it != multi_outputs.end()) {
+						output = it->second.get();
+					}
+				}
+				
+				if(!output) {
+					std::unique_ptr<file_output> new_output(new file_output(o.output_dir, fileinfo, o.extract));
+					output = new_output.get();
+					if(fileinfo->is_multipart()) {
+						multi_outputs.emplace(fileinfo, std::move(new_output));
+					} else {
+						single_outputs.push_back(std::move(new_output));
+					}
+				}
+				
+				outputs.push_back(file_output_location(output, output_loc.second));
+				
 			}
 			
 			// Copy data
-			boost::uint64_t output_size = 0;
+			std::uint64_t output_size = 0;
 			while(!file_source->eof()) {
 				char buffer[8192 * 10];
-				std::streamsize buffer_size = std::streamsize(boost::size(buffer));
+				std::streamsize buffer_size = std::streamsize(std::size(buffer));
 				std::streamsize n = file_source->read(buffer, buffer_size).gcount();
 				if(n > 0) {
-					BOOST_FOREACH(file_output_location & out, outputs) {
+					for(file_output_location & out : outputs) {
 						file_output * output = out.first;
 						output->seek(out.second + output_size);
 						bool success = output->write(buffer, size_t(n));
 						if(!success) {
-							throw std::runtime_error("Error writing file \"" + output->path().string() + '"');
+							throw std::runtime_error("Error writing file \"" + util::as_string(output->path()) + '"');
 						}
 					}
-					extract_progress.update(boost::uint64_t(n));
-					output_size += boost::uint64_t(n);
+					extract_progress.update(std::uint64_t(n));
+					output_size += std::uint64_t(n);
 				}
 			}
 			
@@ -1348,7 +1336,7 @@ void process_file(const fs::path & installer, const extract_options & o) {
 				filetime = util::to_local_time(filetime);
 			}
 			
-			BOOST_FOREACH(file_output_location & out, outputs) {
+			for(file_output_location & out : outputs) {
 				file_output * output = out.first;
 				
 				if(!output || (output->file()->is_multipart() && !output->is_complete())) {
@@ -1376,7 +1364,7 @@ void process_file(const fs::path & installer, const extract_options & o) {
 					}
 				}
 				
-				BOOST_FOREACH(file_output_location & other, outputs) {
+				for(file_output_location & other : outputs) {
 					if(other.first == output) {
 						other.first = NULL;
 					}

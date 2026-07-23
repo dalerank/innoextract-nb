@@ -21,13 +21,9 @@
 #include "cli/goggalaxy.hpp"
 
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <boost/foreach.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/algorithm/string/trim.hpp>
 
 #include "crypto/checksum.hpp"
 
@@ -41,6 +37,46 @@
 namespace gog {
 
 namespace {
+
+//! Equivalent to boost::icontains() for ASCII-only inputs.
+bool icontains(const std::string & haystack, const char * needle) {
+	std::string lower_haystack = haystack;
+	for(char & c : lower_haystack) {
+		if(c >= 'A' && c <= 'Z') { c = char(c - 'A' + 'a'); }
+	}
+	std::string lower_needle = needle;
+	for(char & c : lower_needle) {
+		if(c >= 'A' && c <= 'Z') { c = char(c - 'A' + 'a'); }
+	}
+	return lower_haystack.find(lower_needle) != std::string::npos;
+}
+
+//! Equivalent to boost::trim() for ASCII whitespace.
+void trim(std::string & s) {
+	const char * whitespace = " \t\r\n";
+	size_t start = s.find_first_not_of(whitespace);
+	if(start == std::string::npos) {
+		s.clear();
+		return;
+	}
+	size_t end = s.find_last_not_of(whitespace);
+	s = s.substr(start, end - start + 1);
+}
+
+//! Parse an unsigned integer from a string, requiring the whole string to be consumed.
+//! Equivalent to boost::lexical_cast<T>() for unsigned integer types.
+template <typename T>
+T lexical_cast_uint(const std::string & s) {
+	if(s.empty()) {
+		throw std::invalid_argument("empty string");
+	}
+	size_t pos = 0;
+	unsigned long long value = std::stoull(s, &pos);
+	if(pos != s.size()) {
+		throw std::invalid_argument("trailing characters in \"" + s + '"');
+	}
+	return T(value);
+}
 
 std::vector<std::string> parse_function_call(const std::string & code, const std::string & name) {
 	
@@ -211,7 +247,7 @@ std::vector<constraint> parse_constraints(const std::string & input) {
 		
 		if(end != start) {
 			std::string token = input.substr(start, end - start);
-			boost::trim(token);
+			trim(token);
 			result.push_back(constraint(token, negated));
 		}
 		
@@ -229,7 +265,7 @@ std::string create_constraint_expression(std::vector<constraint> & constraints) 
 	
 	std::string result;
 	
-	BOOST_FOREACH(const constraint & entry, constraints) {
+	for(const constraint & entry : constraints) {
 		
 		if(!result.empty()) {
 			result += " or ";
@@ -251,10 +287,10 @@ std::string create_constraint_expression(std::vector<constraint> & constraints) 
 void parse_galaxy_files(setup::info & info, bool force) {
 	
 	if(!force) {
-		bool is_gog = boost::icontains(info.header.app_publisher, "GOG.com");
-		is_gog = is_gog || boost::icontains(info.header.app_publisher_url, "www.gog.com");
-		is_gog = is_gog || boost::icontains(info.header.app_support_url, "www.gog.com");
-		is_gog = is_gog || boost::icontains(info.header.app_updates_url, "www.gog.com");
+		bool is_gog = icontains(info.header.app_publisher, "GOG.com");
+		is_gog = is_gog || icontains(info.header.app_publisher_url, "www.gog.com");
+		is_gog = is_gog || icontains(info.header.app_support_url, "www.gog.com");
+		is_gog = is_gog || icontains(info.header.app_updates_url, "www.gog.com");
 		if(!is_gog) {
 			return;
 		}
@@ -266,7 +302,7 @@ void parse_galaxy_files(setup::info & info, bool force) {
 	bool has_language_constraints = false;
 	std::set<std::string> all_languages;
 	
-	BOOST_FOREACH(setup::file_entry & file, info.files) {
+	for(setup::file_entry & file : info.files) {
 		
 		// Multi-part file info: file checksum, filename, part count
 		std::vector<std::string> start_info = parse_function_call(file.before_install, "before_install");
@@ -297,7 +333,7 @@ void parse_galaxy_files(setup::info & info, bool force) {
 				remaining_parts = 1;
 			} else {
 				try {
-					remaining_parts = boost::lexical_cast<size_t>(start_info[2]);
+					remaining_parts = lexical_cast_uint<size_t>(start_info[2]);
 					if(remaining_parts == 0) {
 						remaining_parts = 1;
 					}
@@ -333,7 +369,7 @@ void parse_galaxy_files(setup::info & info, bool force) {
 				// Ignore file part MD5 checksum, setup already contains a better one for the deflated data
 				
 				try {
-					boost::uint64_t compressed_size = boost::lexical_cast<boost::uint64_t>(part_info[1]);
+					std::uint64_t compressed_size = lexical_cast_uint<std::uint64_t>(part_info[1]);
 					if(data.file.size != compressed_size) {
 						log_warning << "Unexpected compressed size for GOG Galaxy file part " << file.destination
 						            << ": " << compressed_size << " != " << data.file.size;
@@ -346,7 +382,7 @@ void parse_galaxy_files(setup::info & info, bool force) {
 				try {
 					
 					// GOG Galaxy file parts are deflated, inflate them while extracting
-					data.uncompressed_size = boost::lexical_cast<boost::uint64_t>(part_info[2]);
+					data.uncompressed_size = lexical_cast_uint<std::uint64_t>(part_info[2]);
 					data.file.filter = stream::ZlibFilter;
 					
 					file_start->size += data.uncompressed_size;
@@ -386,7 +422,7 @@ void parse_galaxy_files(setup::info & info, bool force) {
 			std::vector<std::string> check = parse_function_call(file.check, "check_if_install");
 			if(!check.empty() && !check[0].empty()) {
 				std::vector<constraint> languages = parse_constraints(check[0]);
-				BOOST_FOREACH(const constraint & language, languages) {
+				for(const constraint & language : languages) {
 					all_languages.insert(language.name);
 				}
 			}
@@ -407,7 +443,7 @@ void parse_galaxy_files(setup::info & info, bool force) {
 	 * Do this in a separate loop to not break constraint checks above.
 	 */
 	
-	BOOST_FOREACH(setup::file_entry & file, info.files) {
+	for(setup::file_entry & file : info.files) {
 		
 		if(file.destination.empty()) {
 			continue;
@@ -425,9 +461,9 @@ void parse_galaxy_files(setup::info & info, bool force) {
 				bool has_all_languages = false;
 				if(languages.size() >= all_languages.size() && all_languages.size() > 1) {
 					has_all_languages = true;
-					BOOST_FOREACH(const std::string & known_language, all_languages) {
+					for(const std::string & known_language : all_languages) {
 						bool has_language = false;
-						BOOST_FOREACH(const constraint & language, languages) {
+						for(const constraint & language : languages) {
 							if(!language.negated && language.name == known_language) {
 								has_language = true;
 								break;
@@ -454,7 +490,7 @@ void parse_galaxy_files(setup::info & info, bool force) {
 				setup::file_entry::flags arch = 0;
 				if(check[1] != "32#64#") {
 					std::vector<constraint> architectures = parse_constraints(check[1]);
-					BOOST_FOREACH(const constraint & architecture, architectures) {
+					for(const constraint & architecture : architectures) {
 						if(architecture.negated && architectures.size() > 1) {
 							log_warning << "Ignoring architecture for GOG Galaxy file " << file.destination
 							            << ": !" << architecture.name;
@@ -506,7 +542,7 @@ void parse_galaxy_files(setup::info & info, bool force) {
 			info.languages.clear();
 		}
 		info.languages.reserve(all_languages.size());
-		BOOST_FOREACH(const std::string & name, all_languages) {
+		for(const std::string & name : all_languages) {
 			setup::language_entry language;
 			language.name = name;
 			language.dialog_font_size = 0;

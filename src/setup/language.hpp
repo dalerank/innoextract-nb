@@ -29,7 +29,7 @@
 #include <string>
 #include <iosfwd>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "util/encoding.hpp"
 
@@ -52,8 +52,8 @@ struct language_entry {
 	std::string info_before;
 	std::string info_after;
 	
-	boost::uint32_t language_id;
-	boost::uint32_t codepage;
+	std::uint32_t language_id;
+	std::uint32_t codepage;
 	size_t dialog_font_size;
 	size_t dialog_font_standard_height;
 	size_t title_font_size;

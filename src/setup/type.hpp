@@ -29,7 +29,7 @@
 #include <string>
 #include <iosfwd>
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "setup/windows.hpp"
 #include "util/enum.hpp"
@@ -61,7 +61,7 @@ struct type_entry {
 	
 	setup_type type;
 	
-	boost::uint64_t size;
+	std::uint64_t size;
 	
 	void load(std::istream & is, const info & i);
 	

@@ -26,7 +26,7 @@
 #ifndef INNOEXTRACT_CRYPTO_MD5_HPP
 #define INNOEXTRACT_CRYPTO_MD5_HPP
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "crypto/iteratedhash.hpp"
 #include "util/endian.hpp"
@@ -37,7 +37,7 @@ class md5_transform {
 	
 public:
 	
-	typedef boost::uint32_t hash_word;
+	typedef std::uint32_t hash_word;
 	typedef util::little_endian byte_order;
 	enum constants {
 		offset = 0,

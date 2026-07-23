@@ -21,21 +21,19 @@
 /*!
  * \file
  *
- * Filters to be used with boost::iostreams for undoing transformations Inno Setup applies
+ * Filters to be used with \ref stream::io for undoing transformations Inno Setup applies
  * to stored executable files to make them more compressible.
  */
 #ifndef INNOEXTRACT_STREAM_EXEFILTER_HPP
 #define INNOEXTRACT_STREAM_EXEFILTER_HPP
 
 #include <stddef.h>
-#include <iosfwd>
 #include <cassert>
+#include <cstring>
 
-#include <boost/cstdint.hpp>
-#include <boost/iostreams/char_traits.hpp>
-#include <boost/iostreams/concepts.hpp>
-#include <boost/iostreams/get.hpp>
-#include <boost/iostreams/read.hpp>
+#include <cstdint>
+
+#include "stream/io.hpp"
 
 namespace stream {
 
@@ -45,33 +43,24 @@ namespace stream {
  * Essentially, it tries to change the addresses stored for x86 CALL and JMP instructions
  * to be relative to the instruction's position.
  */
-class inno_exe_decoder_4108 : public boost::iostreams::multichar_input_filter {
-	
-private:
-	
-	typedef boost::iostreams::multichar_input_filter base_type;
+class inno_exe_decoder_4108 {
 	
 public:
 	
-	typedef base_type::char_type char_type;
-	typedef base_type::category category;
-	
-	inno_exe_decoder_4108() { close(0); }
+	inno_exe_decoder_4108() { close(); }
 	
 	template <typename Source>
 	std::streamsize read(Source & src, char * dest, std::streamsize n);
 	
-	
-	template <typename Source>
-	void close(const Source & /* source */) {
+	void close() {
 		addr = 0, addr_bytes_left = 0, addr_offset = 5;
 	}
 	
 private:
 	
-	boost::uint32_t addr;
+	std::uint32_t addr;
 	size_t addr_bytes_left;
-	boost::uint32_t addr_offset;
+	std::uint32_t addr_offset;
 	
 };
 
@@ -81,29 +70,21 @@ private:
  * It tries to change the addresses stored for x86 CALL and JMP instructions to be
  * relative to the instruction's position, plus a few other tweaks.
  */
-class inno_exe_decoder_5200 : public boost::iostreams::multichar_input_filter {
-	
-private:
-	
-	typedef boost::iostreams::multichar_input_filter base_type;
+class inno_exe_decoder_5200 {
 	
 public:
-	
-	typedef base_type::char_type char_type;
-	typedef base_type::category category;
 	
 	/*!
 	 * \param flip_high_bytes true if the high byte of addresses is flipped if bit 23 is set.
 	 *                        This optimization is used in Inno Setup 5.3.9 and later.
 	 */
 	explicit inno_exe_decoder_5200(bool flip_high_bytes)
-		: flip_high_byte(flip_high_bytes) { close(0); }
+		: flip_high_byte(flip_high_bytes) { close(); }
 	
 	template <typename Source>
 	std::streamsize read(Source & src, char * dest, std::streamsize n);
 	
-	template <typename Source>
-	void close(const Source & /* source */) {
+	void close() {
 		offset = 0, flush_bytes = 0;
 	}
 	
@@ -132,10 +113,10 @@ private:
 	static const size_t block_size = 0x10000;
 	const bool flip_high_byte;
 	
-	boost::uint32_t offset; //! Total number of bytes read from the source.
+	std::uint32_t offset; //! Total number of bytes read from the source.
 	
-	boost::int8_t flush_bytes;
-	boost::uint8_t buffer[4];
+	std::int8_t flush_bytes;
+	std::uint8_t buffer[4];
 	
 };
 
@@ -146,9 +127,9 @@ std::streamsize inno_exe_decoder_4108::read(Source & src, char * dest, std::stre
 	
 	for(std::streamsize i = 0; i < n; i++, addr_offset++) {
 		
-		int byte = boost::iostreams::get(src);
+		int byte = io::get(src);
 		if(byte == EOF) { return i ? i : EOF; }
-		if(byte == boost::iostreams::WOULD_BLOCK) { return i; }
+		if(byte == io::WOULD_BLOCK) { return i; }
 		
 		if(addr_bytes_left == 0) {
 			
@@ -159,13 +140,13 @@ std::streamsize inno_exe_decoder_4108::read(Source & src, char * dest, std::stre
 			}
 			
 		} else {
-			addr += boost::uint8_t(byte);
-			byte = boost::uint8_t(addr);
+			addr += std::uint8_t(byte);
+			byte = std::uint8_t(addr);
 			addr >>= 8;
 			addr_bytes_left--;
 		}
 		
-		*dest++ = char(boost::uint8_t(byte));
+		*dest++ = char(std::uint8_t(byte));
 	}
 	
 	return n;
@@ -203,9 +184,9 @@ std::streamsize inno_exe_decoder_5200::read(Source & src, char * dest, std::stre
 		if(!flush_bytes) {
 			
 			// Check if this is a CALL or JMP instruction.
-			int byte = boost::iostreams::get(src);
+			int byte = io::get(src);
 			if(byte == EOF) { return total_read ? total_read : EOF; }
-			if(byte == boost::iostreams::WOULD_BLOCK) { return total_read; }
+			if(byte == io::WOULD_BLOCK) { return total_read; }
 			*dest++ = char(byte);
 			offset++;
 			if(byte != 0xe8 && byte != 0xe9) {
@@ -226,25 +207,25 @@ std::streamsize inno_exe_decoder_5200::read(Source & src, char * dest, std::stre
 		
 		// Read all four address bytes.
 		char * dst = reinterpret_cast<char *>(buffer + 4 + flush_bytes);
-		std::streamsize nread = boost::iostreams::read(src, dst, -flush_bytes);
+		std::streamsize nread = io::read(src, dst, -flush_bytes);
 		if(nread == EOF) {
-			flush(boost::int8_t(4 + flush_bytes));
+			flush(std::int8_t(4 + flush_bytes));
 			return total_read ? total_read : EOF;
 		}
-		flush_bytes = boost::int8_t(flush_bytes + nread), offset += boost::uint32_t(nread);
+		flush_bytes = std::int8_t(flush_bytes + nread), offset += std::uint32_t(nread);
 		if(flush_bytes) { return total_read; }
 		
 		// Verify that the high byte of the address is 0x00 or 00xff.
 		if(buffer[3] == 0x00 || buffer[3] == 0xff) {
 			
-			boost::uint32_t addr = offset & 0xffffff; // may wrap, but OK
+			std::uint32_t addr = offset & 0xffffff; // may wrap, but OK
 			
-			boost::uint32_t rel = buffer[0] | (boost::uint32_t(buffer[1]) << 8)
-			                                | (boost::uint32_t(buffer[2]) << 16);
+			std::uint32_t rel = buffer[0] | (std::uint32_t(buffer[1]) << 8)
+			                                | (std::uint32_t(buffer[2]) << 16);
 			rel -= addr;
-			buffer[0] = boost::uint8_t(rel);
-			buffer[1] = boost::uint8_t(rel >> 8);
-			buffer[2] = boost::uint8_t(rel >> 16);
+			buffer[0] = std::uint8_t(rel);
+			buffer[1] = std::uint8_t(rel >> 8);
+			buffer[2] = std::uint8_t(rel >> 16);
 			
 			if(flip_high_byte) {
 				// For a slightly higher compression ratio, we want the resulting high
@@ -252,7 +233,7 @@ std::streamsize inno_exe_decoder_5200::read(Source & src, char * dest, std::stre
 				// of the original relative address is likely to be the sign extension
 				// of bit 23, so if bit 23 is set, toggle all bits in the high byte.
 				if(rel & 0x800000) {
-					buffer[3] = boost::uint8_t(~buffer[3]);
+					buffer[3] = std::uint8_t(~buffer[3]);
 				}
 			}
 			

@@ -20,7 +20,7 @@
 
 #include "stream/lzma.hpp"
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include <lzma.h>
 
@@ -53,10 +53,10 @@ bool lzma_decompressor_impl_base::filter(const char * & begin_in, const char * e
 	
 	lzma_stream * strm = static_cast<lzma_stream *>(stream);
 	
-	strm->next_in = reinterpret_cast<const boost::uint8_t *>(begin_in);
+	strm->next_in = reinterpret_cast<const std::uint8_t *>(begin_in);
 	strm->avail_in = size_t(end_in - begin_in);
 	
-	strm->next_out = reinterpret_cast<boost::uint8_t *>(begin_out);
+	strm->next_out = reinterpret_cast<std::uint8_t *>(begin_out);
 	strm->avail_out = size_t(end_out - begin_out);
 	
 	lzma_ret ret = lzma_code(strm, LZMA_RUN);
@@ -100,15 +100,15 @@ bool inno_lzma1_decompressor_impl::filter(const char * & begin_in, const char * 
 		
 		lzma_options_lzma options;
 		
-		boost::uint8_t properties = boost::uint8_t(header[0]);
+		std::uint8_t properties = std::uint8_t(header[0]);
 		if(properties > (9 * 5 * 5)) {
 			throw lzma_error("inno lzma1 property error", LZMA_FORMAT_ERROR);
 		}
-		options.pb = boost::uint32_t(properties / (9 * 5));
-		options.lp = boost::uint32_t((properties % (9 * 5)) / 9);
-		options.lc = boost::uint32_t(properties % 9);
+		options.pb = std::uint32_t(properties / (9 * 5));
+		options.lp = std::uint32_t((properties % (9 * 5)) / 9);
+		options.lc = std::uint32_t(properties % 9);
 		
-		options.dict_size = util::little_endian::load<boost::uint32_t>(header + 1);
+		options.dict_size = util::little_endian::load<std::uint32_t>(header + 1);
 		
 		stream = init_raw_lzma_stream(LZMA_FILTER_LZMA1, options);
 	}
@@ -128,7 +128,7 @@ bool inno_lzma2_decompressor_impl::filter(const char * & begin_in, const char * 
 		
 		lzma_options_lzma options;
 		
-		boost::uint8_t prop = boost::uint8_t(*begin_in++);
+		std::uint8_t prop = std::uint8_t(*begin_in++);
 		if(prop > 40) {
 			throw lzma_error("inno lzma2 property error", LZMA_FORMAT_ERROR);
 		}
@@ -136,7 +136,7 @@ bool inno_lzma2_decompressor_impl::filter(const char * & begin_in, const char * 
 		if(prop == 40) {
 			options.dict_size = 0xffffffff;
 		} else {
-			options.dict_size = ((boost::uint32_t(2) | boost::uint32_t((prop) & 1)) << ((prop) / 2 + 11));
+			options.dict_size = ((std::uint32_t(2) | std::uint32_t((prop) & 1)) << ((prop) / 2 + 11));
 		}
 		
 		stream = init_raw_lzma_stream(LZMA_FILTER_LZMA2, options);

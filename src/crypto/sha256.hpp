@@ -26,7 +26,7 @@
 #ifndef INNOEXTRACT_CRYPTO_SHA256_HPP
 #define INNOEXTRACT_CRYPTO_SHA256_HPP
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #include "crypto/iteratedhash.hpp"
 #include "util/endian.hpp"
@@ -37,7 +37,7 @@ class sha256_transform {
 	
 public:
 	
-	typedef boost::uint32_t hash_word;
+	typedef std::uint32_t hash_word;
 	typedef util::big_endian byte_order;
 	enum constants {
 		offset = 1,

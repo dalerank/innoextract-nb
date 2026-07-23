@@ -21,13 +21,12 @@
 /*!
  * \file
  *
- * Filter to be used with boost::iostreams for calculating a \ref crypto::checksum.
+ * Filter to be used with \ref stream::io for calculating a \ref crypto::checksum.
  */
 #ifndef INNOEXTRACT_STREAM_CHECKSUM_HPP
 #define INNOEXTRACT_STREAM_CHECKSUM_HPP
 
-#include <boost/iostreams/concepts.hpp>
-#include <boost/iostreams/read.hpp>
+#include "stream/io.hpp"
 
 #include "crypto/checksum.hpp"
 #include "crypto/hasher.hpp"
@@ -35,21 +34,14 @@
 namespace stream {
 
 /*!
- * Filters to be used with boost::iostreams for calculating a \ref crypto::checksum.
+ * Filter to be used with \ref stream::io for calculating a \ref crypto::checksum.
  *
  * An internal checksum state is updated as bytes are read and the final checksum is
  * written to the given checksum object when the end of the source stream is reached.
  */
-class checksum_filter : public boost::iostreams::multichar_input_filter {
-	
-private:
-	
-	typedef boost::iostreams::multichar_input_filter base_type;
+class checksum_filter {
 	
 public:
-	
-	typedef base_type::char_type char_type;
-	typedef base_type::category category;
 	
 	/*!
 	 * \param dest Location to store the final checksum at.
@@ -63,7 +55,7 @@ public:
 	template <typename Source>
 	std::streamsize read(Source & src, char * dest, std::streamsize n) {
 		
-		std::streamsize nread = boost::iostreams::read(src, dest, n);
+		std::streamsize nread = io::read(src, dest, n);
 		
 		if(nread > 0) {
 			hasher.update(dest, size_t(nread));

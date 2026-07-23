@@ -45,7 +45,7 @@
 #elif !defined(_WIN32) && INNOEXTRACT_HAVE_UTIMES
 #include <sys/time.h>
 #elif !defined(_WIN32)
-#include <boost/filesystem/operations.hpp>
+#include <filesystem>
 #endif
 
 #include "util/log.hpp"
@@ -54,21 +54,21 @@ namespace util {
 
 #if defined(_WIN32)
 
-static const boost::int64_t FiletimeOffset = 0x19DB1DED53E8000ll;
+static const std::int64_t FiletimeOffset = 0x19DB1DED53E8000ll;
 
 static time from_filetime(FILETIME ft) {
 	
-	boost::int64_t filetime = boost::int64_t(ft.dwHighDateTime) << 32;
-	filetime += boost::int64_t(ft.dwLowDateTime);
+	std::int64_t filetime = std::int64_t(ft.dwHighDateTime) << 32;
+	filetime += std::int64_t(ft.dwLowDateTime);
 	
 	filetime -= FiletimeOffset;
 	
 	return filetime / 10000000;
 }
 
-static FILETIME to_filetime(time t, boost::uint32_t nsec = 0) {
+static FILETIME to_filetime(time t, std::uint32_t nsec = 0) {
 	
-	boost::int64_t filetime64 = boost::int64_t(t) * 10000000 + boost::int64_t(nsec) / 100 + FiletimeOffset;
+	std::int64_t filetime64 = std::int64_t(t) * 10000000 + std::int64_t(nsec) / 100 + FiletimeOffset;
 	
 	FILETIME filetime;
 	filetime.dwLowDateTime = DWORD(filetime64);
@@ -259,7 +259,7 @@ extern "C" typedef int (*utimensat_proc)
 	(int fd, const char *path, const struct timespec times[2], int flag);
 #endif
 
-bool set_file_time(const boost::filesystem::path & path, time sec, boost::uint32_t nsec) {
+bool set_file_time(const std::filesystem::path & path, time sec, std::uint32_t nsec) {
 	
 	#if (INNOEXTRACT_HAVE_DYNAMIC_UTIMENSAT || INNOEXTRACT_HAVE_UTIMENSAT) \
 	    && INNOEXTRACT_HAVE_AT_FDCWD
@@ -268,7 +268,7 @@ bool set_file_time(const boost::filesystem::path & path, time sec, boost::uint32
 	
 	struct timespec timens[2];
 	timens[0].tv_sec = to_time_t<time_t>(sec, path.string().c_str());
-	timens[0].tv_nsec = boost::int32_t(nsec);
+	timens[0].tv_nsec = std::int32_t(nsec);
 	timens[1] = timens[0];
 	
 	#endif
@@ -312,7 +312,7 @@ bool set_file_time(const boost::filesystem::path & path, time sec, boost::uint32
 	
 	struct timeval times[2];
 	times[0].tv_sec = to_time_t<time_t>(sec, path.string().c_str());
-	times[0].tv_usec = boost::int32_t(nsec / 1000);
+	times[0].tv_usec = std::int32_t(nsec / 1000);
 	times[1] = times[0];
 	
 	return (utimes(path.string().c_str(), times) == 0);
@@ -322,9 +322,12 @@ bool set_file_time(const boost::filesystem::path & path, time sec, boost::uint32
 	// fallback with second precision or worse
 	
 	try {
-		(void)nsec; // sub-second precision not supported by Boost
+		(void)nsec; // sub-second precision not supported by std::filesystem
 		std::time_t tt = to_time_t<std::time_t>(sec, path.string().c_str());
-		boost::filesystem::last_write_time(path, tt);
+		std::filesystem::file_time_type ftime(
+			std::chrono::duration_cast<std::filesystem::file_time_type::duration>(
+				std::chrono::seconds(tt)));
+		std::filesystem::last_write_time(path, ftime);
 		return true;
 	} catch(...) {
 		return false;
