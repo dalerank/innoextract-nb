@@ -390,6 +390,7 @@ static void print_help(const char * name) {
 		{ "--no-warn-unused",       "Don't warn on unused .bin files" },
 		{ "-c [ --color ] arg",     "Enable/disable color output" },
 		{ "-p [ --progress ] arg",  "Enable/disable the progress bar" },
+		{ "  --progress-machine",   "Emit PROGRESS <0..1> lines on stderr for UIs" },
 #ifdef DEBUG
 		{ "--debug",                "Output debug information" },
 #endif
@@ -466,6 +467,7 @@ int main(int argc, char * argv[]) {
 	parser.add("no-warn-unused");
 	parser.add("color", 'c', true, true);
 	parser.add("progress", 'p', true, true);
+	parser.add("progress-machine");
 #ifdef DEBUG
 	parser.add("debug");
 #endif
@@ -508,6 +510,9 @@ int main(int argc, char * argv[]) {
 		progress_e = iequals(parser.value("progress"), "true") ? color::enable : color::disable;
 	}
 	color::init(color_e, progress_e);
+	if(parser.count("progress-machine")) {
+		progress::set_machine_progress(true);
+	}
 	
 	// Help output.
 	if(parser.count("help")) {

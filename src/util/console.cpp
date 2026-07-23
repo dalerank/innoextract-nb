@@ -43,6 +43,7 @@
 #include "util/windows.hpp"
 
 static bool show_progress = true;
+static bool machine_progress = false;
 
 #if defined(SIGWINCH)
 
@@ -266,6 +267,13 @@ void progress::clear(ClearMode mode) {
 
 void progress::show(float value, const std::string & label) {
 	
+	if(machine_progress) {
+		std::cerr << "PROGRESS " << std::fixed << std::setprecision(4)
+		          << std::min(1.f, std::max(0.f, value)) << '\n';
+		std::cerr.flush();
+		return;
+	}
+	
 	if(!show_progress) {
 		return;
 	}
@@ -304,6 +312,14 @@ void progress::show(float value, const std::string & label) {
 }
 
 void progress::show_unbounded(float value, const std::string & label) {
+	
+	if(machine_progress) {
+		// Map the bounce animation to a soft 0..1 pulse for UIs without a known total.
+		std::cerr << "PROGRESS " << std::fixed << std::setprecision(4)
+		          << std::min(1.f, std::max(0.f, value)) << '\n';
+		std::cerr.flush();
+		return;
+	}
 	
 	if(!show_progress) {
 		return;
@@ -349,7 +365,7 @@ progress::progress(std::uint64_t max_value, bool show_value_rate)
 
 bool progress::update(std::uint64_t delta, bool force) {
 	
-	if(!show_progress) {
+	if(!show_progress && !machine_progress) {
 		return false;
 	}
 	
@@ -417,10 +433,17 @@ bool progress::update(std::uint64_t delta, bool force) {
 }
 
 void progress::set_enabled(bool enable) {
-	show_progress = enable;
+	show_progress = enable && !machine_progress;
 }
 
 bool progress::is_enabled() {
-	return show_progress;
+	return show_progress || machine_progress;
+}
+
+void progress::set_machine_progress(bool enable) {
+	machine_progress = enable;
+	if(enable) {
+		show_progress = false;
+	}
 }
 

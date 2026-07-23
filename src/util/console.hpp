@@ -158,6 +158,10 @@ public:
 	static void set_enabled(bool enable);
 	
 	static bool is_enabled();
+
+	//! Emit machine-readable "PROGRESS <0..1>" lines on stderr (for parent process UIs).
+	//! Disables the TTY progress bar while enabled.
+	static void set_machine_progress(bool enable);
 	
 };
 
