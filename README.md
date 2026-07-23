@@ -1,129 +1,135 @@
+# innoextract-nb
 
-# innoextract - A tool to unpack installers created by Inno Setup
+**Boost-free fork** of [innoextract](https://github.com/dscharrer/innoextract) for use with
+[Akhenaten](https://github.com/dalerank/Akhenaten) — a Pharaoh / Cleopatra reimplementation.
 
-[Inno Setup](https://jrsoftware.org/isinfo.php) is a tool to create installers for Microsoft Windows applications. innoextract allows to extract such installers under non-Windows systems without running the actual installer using wine. innoextract currently supports installers created by Inno Setup 1.2.10 to 6.3.3.
+Upstream innoextract unpacks [Inno Setup](https://jrsoftware.org/isinfo.php) installers
+(including many GOG.com game installers) without running them under Wine.
+This fork keeps that goal, but **removes the Boost dependency** so Akhenaten can ship
+`innoextract` as a small external helper next to the game binary.
 
-In addition to standard Inno Setup installers, innoextract also supports some modified Inno Setup variants including Martijn Laan's My Inno Setup Extensions 1.3.10 to 3.0.6.1 as well as GOG.com's Inno Setup-based game installers. innoextract is able to unpack Wadjet Eye Games installers (to play with AGS), Arx Fatalis patches (for use with Arx Libertatis) as well as various other Inno Setup executables.
+| | Upstream | This fork (`innoextract-nb`) |
+|---|---|---|
+| Boost | Required | **Not used** |
+| Compression | via Boost.Iostreams + liblzma | zlib + bzip2 + liblzma |
+| CLI / filesystem / time | Boost.ProgramOptions / Filesystem / DateTime | custom CLI + `std::filesystem` + `std::chrono` |
+| Primary consumer | general unpack tool | Akhenaten installer bootstrap |
 
-innoextract is available under the ZLIB license - see the LICENSE file.
+Supported installer range matches upstream intent: Inno Setup-based packages, including
+GOG variants used for **Pharaoh Gold** and similar titles.
 
-See the website for [Linux packages](https://constexpr.org/innoextract/#packages).
+License: **ZLIB** (same as upstream) — see [LICENSE](LICENSE).
 
-## Contact
+Upstream site: https://constexpr.org/innoextract/  
+Upstream author: [Daniel Scharrer](https://constexpr.org/)
 
-[Website](https://constexpr.org/innoextract/)
+## Project goals
 
-Author: [Daniel Scharrer](https://constexpr.org/)
+1. **No Boost** — build and link without Boost headers or libraries.
+2. **Stay useful for Akhenaten** — extract GOG / Inno Setup Pharaoh (+ Cleopatra) installers
+   into a folder the game can use as `data_directory` / `PharaohData`.
+3. **Keep unpack fidelity** — same Inno Setup / GOG extract behaviour as upstream for the
+   installer formats Akhenaten cares about.
+4. **Remain a standalone tool** — never link into `akhenaten.exe`; ship as `innoextract.exe`
+   beside the game (spawned at runtime).
+5. **Stay close to upstream** — rebase / cherry-pick when practical; do not turn this into a
+   general Windows installer suite (InstallShield demos belong to [unshield](https://github.com/twogood/unshield) + 7-Zip in Akhenaten).
+
+Non-goals: GUI, component-selective install UI, running installer scripts, or replacing
+Wine for arbitrary Windows setup.exe files.
 
 ## Dependencies
 
-* **[Boost](https://www.boost.org/) 1.37** or newer
-* **liblzma** from [xz-utils](https://tukaani.org/xz/) *(optional)*
-* **iconv** (*optional*, either as part of the system libc, as is the case with [glibc](https://www.gnu.org/software/libc/) and [uClibc](https://uclibc.org/), or as a separate [libiconv](https://www.gnu.org/software/libiconv/))
+* **CMake** 3.x (2.8+ may still configure; CI/local builds use modern CMake)
+* A C++17-capable compiler
+* **liblzma** ([xz-utils](https://tukaani.org/xz/)) — **required** for modern Inno/GOG installers
+* **zlib** and **bzip2** — older compression methods
+* **iconv** *(optional)* — system libc, win32, or libiconv
 
-For Boost you will need the headers as well as the `iostreams`, `filesystem`, `date_time`, `system` and `program_options` libraries. Older Boost version may work but are not actively supported. The boost `iostreams` library needs to be build with zlib and bzip2 support.
+On Windows, [vcpkg](https://vcpkg.io/) with a static triplet works well, e.g.:
 
-While innoextract can be built without liblzma by manually setting `-DUSE_LZMA=OFF`, it is highly recommended and you won't be able to extract most installers created by newer Inno Setup versions without it.
+```text
+liblzma zlib bzip2
+```
 
-To build innoextract you will also need **[CMake](https://cmake.org/) 2.8** and a working C++ compiler, as well as the development headers for liblzma and boost.
+(see also Akhenaten’s `cmake/innoextract-vcpkg-deps.txt`).
 
-See the Website for [operating system-specific instructions](https://constexpr.org/innoextract/install).
+## Build
 
-## Compile and install
+```bash
+mkdir build && cd build
+cmake .. -DUSE_STATIC_LIBS=ON -DUSE_LZMA=ON -DBUILD_TESTS=OFF
+cmake --build . --config Release
+```
 
-To compile innoextract, run:
+Windows + vcpkg example:
 
-    $ mkdir -p build && cd build
-    $ cmake ..
-    $ make
+```powershell
+cmake -S . -B build-noboost `
+  -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake `
+  -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+  -DUSE_STATIC_LIBS=ON -DUSE_LZMA=ON -DBUILD_TESTS=OFF
+cmake --build build-noboost --config Release
+```
 
-To install the binaries system-wide, run as root:
+### Useful CMake options
 
-    # make install
-
-The default build settings are tuned for users - if you plan to make changes to Arx Libertatis you should append the `-DDEVELOPER=1` option to the `cmake` command to enable debug output and fast incremental builds.
-
-### Build options:
-
-| Option                    | Default   | Description |
-|:------------------------- |:---------:|:----------- |
-| `BUILD_DECRYPTION`        | `ON`      | Build decryption support.
-| `USE_LZMA`                | `ON`      | Use `liblzma`.
-| `WITH_CONV`               | *not set* | The charset conversion library to use. Valid values are `iconv`, `win32` and `builtin`¹. If not set, a library appropriate for the target platform will be chosen.
-| `CMAKE_BUILD_TYPE`        | `Release` | Set to `Debug` to enable debug output.
-| `DEBUG`                   | `OFF`²    | Enable debug output and runtime checks.
-| `DEBUG_EXTRA`             | `OFF`     | Expensive debug options.
-| `SET_WARNING_FLAGS`       | `ON`      | Adjust compiler warning flags. This should not affect the produced binaries but is useful to catch potential problems.
-| `SET_NOISY_WARNING_FLAGS` | `OFF`     | Enable warnings with false positives many cases that still need to be fixed.
-| `SET_OPTIMIZATION_FLAGS`  | `ON`      | Adjust compiler optimization flags.
-| `CXX_STD_VERSION`         | `2017`    | Maximum C++ standard version to enable.
-| `USE_DYNAMIC_UTIMENSAT`   | `OFF`     | Dynamically load utimensat(2) if not available at compile time.
-| `USE_STATIC_LIBS`         | `OFF`³    | Turns on static linking for all libraries, including `-static-libgcc` and `-static-libstdc++`. You can also use the individual options below:
-| `LZMA_USE_STATIC_LIBS`    | `OFF`⁴    | Statically link `liblzma`.
-| `Boost_USE_STATIC_LIBS`   | `OFF`⁴    | Statically link Boost. See also `FindBoost.cmake`.
-| `ZLIB_USE_STATIC_LIBS`    | `OFF`⁴    | Statically link `libz`. (used via Boost)
-| `BZip2_USE_STATIC_LIBS`   | `OFF`⁴    | Statically link `libbz2`. (used via Boost)
-| `iconv_USE_STATIC_LIBS`   | `OFF`⁴    | Statically link `libiconv`.
-| `STRICT_USE`              | `OFF`     | Abort if there are missing optional dependencies.
-| `DEVELOPER`               | `OFF`     | Enable build options suitable for developers⁵.
-| `FASTLINK`                | `OFF`⁶    | Optimize for link speed.
-| `USE_LTO`                 | `ON`²     | Use link-time code generation.
-| `USE_LD`                  | `best`⁸   | Linker to use - `default`, `mold`, `lld`, `gold`, `bfd` or `best`
-| `BUILD_TESTS`             | `OFF`⁶    | Build unit tests that can be run using `make check`
-| `RUN_TESTS`               | `OFF`⁷    | Automatically run tests
-| `RUN_TARGET`              | (none)    | Wrapper to run binaries produced in the build process
-1. The builtin charset conversion only supports Windows-1252 and UTF-16LE. This is normally enough for filenames, but custom message strings (which can be included in filenames) may use arbitrary encodings.
-2. Enabled automatically if `CMAKE_BUILD_TYPE` is set to `Debug`.
-3. Under Windows, the default is `ON`.
-4. Default is `ON` if `USE_STATIC_LIBS` is enabled.
-5. Currently this and enables `DEBUG`, `BUILD_TESTS`, `RUN_TESTS` and `FASTLINK` for faster incremental builds and improved debug output, unless those options have been explicitly specified by the user.
-6. Enabled automatically if `DEVELOPER` is enabled.
-7. Enabled automatically if `DEVELOPER` is enabled unless cross-compiling without `RUN_TARGET` set
-8. Disabled automatically (set to `default`) if both `SET_OPTIMIZATION_FLAGS` and `FASTLINK` are disabled. `best` will select the most suited linker based on availability and other settings such as `USE_LTO`.
-
-Install options:
-
-| Option                      | Default              | Description |
-|:--------------------------- |:--------------------:|:----------- |
-| `CMAKE_INSTALL_PREFIX`      | `/usr/local`         | Where to install innoextract.
-| `CMAKE_INSTALL_BINDIR`      | `bin`                | Location for binaries (relative to prefix).
-| `CMAKE_INSTALL_DATAROOTDIR` | `share`              | Location for data files (relative to prefix).
-| `CMAKE_INSTALL_MANDIR`      | `${DATAROOTDIR}/man` | Location for man pages (relative to prefix).
-
-Set options by passing `-D<option>=<value>` to cmake.
+| Option | Default | Description |
+|:---|:---:|:---|
+| `USE_LZMA` | `ON` | liblzma support (keep on for GOG) |
+| `BUILD_DECRYPTION` | `ON` | encrypted installer support |
+| `USE_STATIC_LIBS` | `ON` on Windows | static link compression libs |
+| `BUILD_TESTS` | `OFF` | unit tests (`make check`) |
+| `DEVELOPER` | `OFF` | debug-oriented defaults |
 
 ## Run
 
-To extract a setup file to the current directory run:
+```bash
+innoextract -e -d ./out Setup.exe
+```
 
-    $ innoextract <file>
+```powershell
+.\innoextract.exe -e -d .\PharaohData .\Installer\setup_pharaoh_gold_….exe
+```
 
-A list of available options can be retrieved using
+Help:
 
-    $ innoextract --help
+```bash
+innoextract --help
+```
 
-Documentation is also available as a man page:
+### Regression helper (Akhenaten)
 
-    $ man 1 innoextract
+```powershell
+.\tools\regression_extract.ps1 `
+  -InnoextractPath path\to\innoextract.exe `
+  -Installer C:\path\to\Setup.exe `
+  -OutDir D:\tmp\extract-test
+```
+
+More notes: [tools/README-noboost.md](tools/README-noboost.md).
+
+## Relationship to Akhenaten
+
+Akhenaten builds this tree as an `ExternalProject` (`cmake/BuildInnoextract.cmake`), copies
+`innoextract` next to the game, and may unpack `Installer/*.exe` into `PharaohData` on startup
+when Steam data is missing.
+
+InstallShield / Sierra demo packages are **out of scope** here; Akhenaten handles those with
+`7z` + `unshield`.
 
 ## Limitations
 
-* There is no support for extracting individual components and limited support for filtering by name.
+Same practical limits as upstream:
 
-* Included scripts and checks are not executed.
+* No full component selection UI; limited name filtering
+* Included scripts / checks are not executed
+* Directory mapping for Inno variables is hard-coded
+* Multi-disk slice names must follow the standard scheme
 
-* The mapping from Inno Setup variables like the application directory to subdirectories is hard-coded.
-
-* Names for data slice/disk files in multi-file installers must follow the standard naming scheme.
-
-A perhaps more complete, but Windows-only, tool to extract Inno Setup files is [innounp](http://innounp.sourceforge.net/).
-
-Extracting Windows installer executables created by programs other than Inno Setup is out of the scope of this project. Some of these can be unpacked by the following programs:
-
-* [cabextract](https://cabextract.org.uk/)
-
-* [unshield](https://github.com/twogood/unshield)
+Windows-only alternative: [innounp](http://innounp.sourceforge.net/).
 
 ## Disclaimer
 
-This project is in no way associated with Inno Setup or [jrsoftware.org](https://jrsoftware.org/).
+Not affiliated with Inno Setup or jrsoftware.org.  
+Upstream project: [dscharrer/innoextract](https://github.com/dscharrer/innoextract).
