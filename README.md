@@ -111,9 +111,13 @@ More notes: [tools/README-noboost.md](tools/README-noboost.md).
 
 ## Relationship to Akhenaten
 
-Akhenaten builds this tree as an `ExternalProject` (`cmake/BuildInnoextract.cmake`), copies
-`innoextract` next to the game, and may unpack `Installer/*.exe` into `PharaohData` on startup
-when Steam data is missing.
+Akhenaten downloads a **prebuilt** `innoextract` from this repository's
+[GitHub Releases](https://github.com/dalerank/innoextract-nb/releases) (see
+`cmake/BuildInnoextract.cmake`), copies it next to the game, and may unpack
+`Installer/*.exe` into `PharaohData` on startup when Steam data is missing.
+It never links innoextract into `akhenaten.exe`.
+
+To publish new binaries, push a `v*` tag (or run the **Release** workflow).
 
 InstallShield / Sierra demo packages are **out of scope** here; Akhenaten handles those with
 `7z` + `unshield`.
