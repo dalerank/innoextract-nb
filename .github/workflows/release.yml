@@ -1,0 +1,144 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.artifact }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: innoextract-windows-x64
+            archive: innoextract-windows-x64.zip
+            exe: innoextract.exe
+          - os: ubuntu-22.04
+            artifact: innoextract-linux-x64
+            archive: innoextract-linux-x64.tar.gz
+            exe: innoextract
+          - os: macos-14
+            artifact: innoextract-macos-arm64
+            archive: innoextract-macos-arm64.tar.gz
+            exe: innoextract
+          - os: macos-13
+            artifact: innoextract-macos-x64
+            archive: innoextract-macos-x64.tar.gz
+            exe: innoextract
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake liblzma-dev zlib1g-dev libbz2-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: brew install cmake xz
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_STATIC_LIBS=ON \
+            -DUSE_LZMA=ON \
+            -DINNOEXTRACT_FETCH_DEPS=ON \
+            -DBUILD_TESTS=OFF \
+            -DDEVELOPER=OFF
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --parallel
+
+      - name: Locate binary
+        id: bin
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidates=(
+            "build/Release/${{ matrix.exe }}"
+            "build/${{ matrix.exe }}"
+            "build/src/Release/${{ matrix.exe }}"
+            "build/src/${{ matrix.exe }}"
+          )
+          for c in "${candidates[@]}"; do
+            if [[ -f "$c" ]]; then
+              echo "path=$c" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "Built binary not found" >&2
+          find build -name '${{ matrix.exe }}' -type f || true
+          exit 1
+
+      - name: Pack (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          stage="${{ matrix.artifact }}"
+          mkdir -p "$stage"
+          cp "${{ steps.bin.outputs.path }}" "$stage/${{ matrix.exe }}"
+          7z a -tzip "${{ matrix.archive }}" "$stage/${{ matrix.exe }}"
+
+      - name: Pack (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          stage="${{ matrix.artifact }}"
+          mkdir -p "$stage"
+          cp "${{ steps.bin.outputs.path }}" "$stage/${{ matrix.exe }}"
+          chmod +x "$stage/${{ matrix.exe }}"
+          tar -czf "${{ matrix.archive }}" -C "$stage" "${{ matrix.exe }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "name=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: innoextract-nb ${{ steps.tag.outputs.name }}
+          generate_release_notes: true
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
