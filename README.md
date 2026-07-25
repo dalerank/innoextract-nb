@@ -40,36 +40,22 @@ Wine for arbitrary Windows setup.exe files.
 
 ## Dependencies
 
-* **CMake** 3.x (2.8+ may still configure; CI/local builds use modern CMake)
+* **CMake** 3.14+ recommended (FetchContent for standalone deps needs 3.14+)
 * A C++17-capable compiler
 * **liblzma** ([xz-utils](https://tukaani.org/xz/)) — **required** for modern Inno/GOG installers
 * **zlib** and **bzip2** — older compression methods
 * **iconv** *(optional)* — system libc, win32, or libiconv
 
-On Windows, [vcpkg](https://vcpkg.io/) with a static triplet works well, e.g.:
-
-```text
-liblzma zlib bzip2
-```
-
-(see also Akhenaten’s `cmake/innoextract-vcpkg-deps.txt`).
+By default (`INNOEXTRACT_FETCH_DEPS=ON`) missing compression libs are downloaded and
+built via CMake FetchContent — no system packages required for a standalone static binary.
+Set `-DINNOEXTRACT_FETCH_DEPS=OFF` to require system packages only (e.g. `liblzma-dev`
+on Linux).
 
 ## Build
 
 ```bash
-mkdir build && cd build
-cmake .. -DUSE_STATIC_LIBS=ON -DUSE_LZMA=ON -DBUILD_TESTS=OFF
-cmake --build . --config Release
-```
-
-Windows + vcpkg example:
-
-```powershell
-cmake -S . -B build-noboost `
-  -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake `
-  -DVCPKG_TARGET_TRIPLET=x64-windows-static `
-  -DUSE_STATIC_LIBS=ON -DUSE_LZMA=ON -DBUILD_TESTS=OFF
-cmake --build build-noboost --config Release
+cmake -S . -B build -DUSE_STATIC_LIBS=ON -DUSE_LZMA=ON -DBUILD_TESTS=OFF
+cmake --build build --config Release
 ```
 
 ### Useful CMake options
@@ -77,6 +63,7 @@ cmake --build build-noboost --config Release
 | Option | Default | Description |
 |:---|:---:|:---|
 | `USE_LZMA` | `ON` | liblzma support (keep on for GOG) |
+| `INNOEXTRACT_FETCH_DEPS` | `ON` (CMake ≥ 3.14) | fetch/build xz, zlib, bzip2 when not found |
 | `BUILD_DECRYPTION` | `ON` | encrypted installer support |
 | `USE_STATIC_LIBS` | `ON` on Windows | static link compression libs |
 | `BUILD_TESTS` | `OFF` | unit tests (`make check`) |

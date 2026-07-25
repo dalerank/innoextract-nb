@@ -43,9 +43,17 @@ function(innoextract_fetch_lzma)
 	if(NOT TARGET liblzma)
 		message(FATAL_ERROR "innoextract: fetched xz-utils but liblzma target is missing")
 	endif()
+	# Public API headers live under src/liblzma/api (lzma.h). Set explicitly so
+	# include_directories() works even when target usage requirements do not
+	# propagate (common with the Visual Studio generator + FetchContent).
 	set(LZMA_LIBRARIES liblzma PARENT_SCOPE)
-	set(LZMA_INCLUDE_DIR "" PARENT_SCOPE)
-	set(LZMA_DEFINITIONS "" PARENT_SCOPE)
+	set(LZMA_INCLUDE_DIR "${innoextract_xz_SOURCE_DIR}/src/liblzma/api" PARENT_SCOPE)
+	# Static liblzma on Windows requires LZMA_API_STATIC when including lzma.h.
+	if(WIN32)
+		set(LZMA_DEFINITIONS -DLZMA_API_STATIC PARENT_SCOPE)
+	else()
+		set(LZMA_DEFINITIONS "" PARENT_SCOPE)
+	endif()
 	set(LZMA_FOUND TRUE PARENT_SCOPE)
 	if(DEFINED _old_build_shared)
 		set(BUILD_SHARED_LIBS "${_old_build_shared}" CACHE BOOL "" FORCE)
@@ -103,8 +111,8 @@ function(innoextract_fetch_bzip2)
 			${innoextract_bzip2_SOURCE_DIR}/bzlib.c
 		)
 		target_include_directories(innoextract_bz2 PUBLIC ${innoextract_bzip2_SOURCE_DIR})
-		# Avoid pulling in bzip2's stdio helpers into a library-only build.
-		target_compile_definitions(innoextract_bz2 PRIVATE BZ_NO_STDIO)
+		# Do not define BZ_NO_STDIO: that removes bzlib.c's bz_internal_error()
+		# and leaves an unresolved symbol at link time.
 	endif()
 	set(BZIP2_LIBRARIES innoextract_bz2 PARENT_SCOPE)
 	set(BZIP2_INCLUDE_DIR ${innoextract_bzip2_SOURCE_DIR} PARENT_SCOPE)
